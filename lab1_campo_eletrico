@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <title>Simulador de Campo Elétrico 2D com Canvas</title>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #eef1f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #simulation-canvas {
+            border: 1px solid #ccc;
+            background-color: #fff;
+        }
+
+        /* --- Painel de Controle --- */
+        .controls-panel {
+            position: fixed; top: 20px; left: 20px; z-index: 100;
+            background: rgba(255, 255, 255, 0.98); padding: 20px; border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); border: 1px solid rgba(0, 0, 0, 0.1);
+            width: 280px;
+        }
+        .controls-panel h3 { margin-top: 0; border-bottom: 2px solid #0d6efd; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { font-weight: bold; display: block; margin-bottom: 5px; }
+        .form-group input, .controls-panel button {
+            width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px;
+            border: 1px solid #ccc; font-size: 16px;
+        }
+        .controls-panel button { background-color: #0d6efd; color: white; cursor: pointer; transition: background-color 0.2s; margin-top: 10px; }
+        .controls-panel button:hover { background-color: #0b5ed7; }
+        #charge-list-container { margin-top: 20px; }
+        #charge-list { list-style-type: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; }
+        #charge-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px;
+            border-radius: 6px; margin-bottom: 5px; background-color: #f8f9fa; }
+        #charge-list li .remove-btn { background: #dc3545; color: white; border: none; border-radius: 4px;
+            cursor: pointer; padding: 3px 8px; margin: 0; }
+
+        /* --- Avatar --- */
+        .avatar-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 100;
+            display: flex; align-items: flex-end;
+        }
+        #avatar-wrapper {
+            position: relative; width: 150px; height: 185px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+            animation: float 4s ease-in-out infinite;
+        }
+        .avatar-head { position: absolute; top: 0; left: 0; width: 150px; height: 150px; z-index: 10; }
+        .avatar-img {
+            width: 100%; height: 100%; border-radius: 50%; border: 4px solid #fff;
+            box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); transition: box-shadow 0.3s ease-in-out;
+        }
+        .avatar-speaking { animation: pulse-glow 1.5s infinite; }
+        .avatar-neck {
+            position: absolute; top: 135px; left: 50%; transform: translateX(-50%);
+            width: 30px; height: 15px; background-color: #495057; z-index: 6;
+        }
+        .avatar-body {
+            position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 120px; height: 50px; background-color: #0d6efd;
+            border-radius: 60px 60px 20px 20px; box-shadow: inset 0 -10px 20px rgba(0,0,0,0.2); z-index: 5;
+        }
+        .eye { position: absolute; background: white; border-radius: 50%; width: 30px; height: 38px; }
+        .left-eye { top: 55px; left: 35px; }
+        .right-eye { top: 55px; left: 85px; }
+        .pupil {
+            position: absolute; background: #222; width: 16px; height: 16px; border-radius: 50%;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+        }
+        .speech-bubble {
+            background: #fff; border: 2px solid #0d6efd; border-radius: 15px; padding: 20px;
+            max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 16px; margin-right: 20px;
+        }
+        .speech-bubble h3 { margin-top: 0; color: #0b5ed7; }
+        #sound-toggle {
+            position: absolute; top: 10px; right: 10px; z-index: 15; width: 30px; height: 30px;
+            background: #fff; border-radius: 50%; border: 1px solid #ccc; cursor: pointer; font-size: 16px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes pulse-glow { 0% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(13, 110, 253, 1), 0 0 40px rgba(13, 110, 253, 0.8); }
+            100% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } }
+    </style>
+</head>
+<body>
+
+    <div class="controls-panel">
+        <h3>Controle de Cargas</h3>
+        <div class="form-group">
+            <label for="charge-value">Valor da Carga (use '-' para negativa)</label>
+            <input type="number" id="charge-value" value="1.0" step="0.5">
+        </div>
+        <button id="add-charge-btn">Adicionar Carga no Centro</button>
+        <button id="toggle-simulation-btn">▶️ Iniciar Simulação</button>
+        <button id="reset-btn" style="background-color: #6c757d;">🔄 Resetar Posições</button>
+        
+        <div id="charge-list-container">
+            <h4>Cargas Ativas:</h4>
+            <ul id="charge-list"></ul>
+        </div>
+    </div>
+    
+    <div class="avatar-container">
+        <div class="speech-bubble" id="avatar-speech">
+            <h3>Olá! Bem-vindo ao Simulador!</h3>
+            <p>Adicione cargas e clique em <b>Iniciar Simulação</b> para vê-las interagir. Você também pode arrastá-las!</p>
+        </div>
+        <div id="avatar-wrapper">
+            <div class="avatar-body"></div>
+            <div class="avatar-neck"></div>
+            <div class="avatar-head">
+                <img src="data:image/jpeg;base64,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" class="avatar-img" id="avatar-img">
+                <div class="eye left-eye"><div class="pupil"></div></div>
+                <div class="eye right-eye"><div class="pupil"></div></div>
+                <button id="sound-toggle">🔇</button>
+            </div>
+        </div>
+    </div>
+    
+    <canvas id="simulation-canvas"></canvas>
+
+    <script>
+        // --- CONFIGURAÇÕES GLOBAIS E ESTADO DA APLICAÇÃO ---
+        let charges = [];
+        let isMuted = true;
+        
+        let selectedCharge = null;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        let isSimulationRunning = false;
+        let lastTimestamp = 0;
+        let initialChargesState = [];
+
+        // --- ✅ CONSTANTE DE FÍSICA CORRIGIDA ---
+        // Este valor foi ajustado para criar um movimento visualmente agradável,
+        // não representa a constante de Coulomb real.
+        const FORCE_CONSTANT = 5e18; 
+
+        const defaultAvatarMessage = `
+            <h3>Bem-vindo ao Simulador!</h3>
+            <p>Adicione cargas, clique em <b>Iniciar Simulação</b> e veja a mágica acontecer! Você também pode arrastá-las.</p>
+        `;
+
+        // --- LÓGICA DE VETORES (Sem alterações) ---
+        const vecSub = (v1, v2) => [v1[0] - v2[0], v1[1] - v2[1]];
+        const vecNorm = (v) => Math.sqrt(v[0]**2 + v[1]**2);
+        const vecScale = (v, s) => [v[0] * s, v[1] * s];
+        const vecAdd = (v1, v2) => [v1[0] + v2[0], v1[1] + v2[1]];
+
+        // --- LÓGICA DE CÁLCULO DE CAMPO ELÉTRICO (Sem alterações) ---
+        // (A constante k real só é usada para desenhar as linhas de campo)
+        const k_real = 8.98755e9;
+        function getElectricFieldAtPoint(point) {
+            let netField = [0, 0];
+            charges.forEach(charge => {
+                const rVec = vecSub(point, charge.pos);
+                const rMag = vecNorm(rVec);
+                if (rMag < 0.01) return;
+                const rUnitVec = vecScale(rVec, 1 / rMag);
+                const fieldMag = (k_real * charge.q) / (rMag**2);
+                netField = vecAdd(netField, vecScale(rUnitVec, fieldMag));
+            });
+            return netField;
+        }
+
+        function integrateFieldLine(startPoint) {
+            let path = [startPoint];
+            let currentPoint = [...startPoint];
+            const stepSize = 0.08, maxSteps = 250;
+
+            for (let i = 0; i < maxSteps; i++) {
+                const field = getElectricFieldAtPoint(currentPoint);
+                const fieldMag = vecNorm(field);
+                if (fieldMag === 0) break;
+                
+                const direction = vecScale(field, 1 / fieldMag);
+                const nextPoint = vecAdd(currentPoint, vecScale(direction, stepSize));
+                path.push(nextPoint);
+                currentPoint = nextPoint;
+
+                if (vecNorm(currentPoint) > 15) break;
+                for (const charge of charges) {
+                    if (charge.q < 0 && vecNorm(vecSub(currentPoint, charge.pos)) < 0.25) return path;
+                }
+            }
+            return path;
+        }
+
+        // --- LÓGICA DO AVATAR (Sem alterações) ---
+        const avatarImg = document.getElementById('avatar-img');
+        function speak(text) {
+            if (isMuted || !('speechSynthesis' in window)) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            utterance.rate = 1.1;
+            utterance.onstart = () => avatarImg.classList.add('avatar-speaking');
+            utterance.onend = () => avatarImg.classList.remove('avatar-speaking');
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            const pupils = document.querySelectorAll('.pupil');
+            pupils.forEach(pupil => {
+                const rect = pupil.parentElement.getBoundingClientRect();
+                const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                const rad = Math.atan2(e.pageY - y, e.pageX - x);
+                const rot = (rad * (180 / Math.PI) * -1) + 270;
+                pupil.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+            });
+        });
+        
+        // --- FUNÇÕES DE ATUALIZAÇÃO DA UI (Sem alterações) ---
+        function updateChargeListUI() {
+            const listElement = document.getElementById('charge-list');
+            listElement.innerHTML = '';
+            charges.forEach((charge, index) => {
+                const li = document.createElement('li');
+                const chargeValue = (charge.q / 1e-9).toFixed(1);
+                li.innerHTML = `<span>Carga: ${chargeValue} nC</span><button class="remove-btn" onclick="removeCharge(${index})">X</button>`;
+                listElement.appendChild(li);
+            });
+        }
+        
+        function updateAvatar(message, shouldSpeak = false) {
+            document.getElementById('avatar-speech').innerHTML = message;
+            if (shouldSpeak) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = message;
+                speak(tempDiv.textContent || "");
+            }
+        }
+        
+        // --- LÓGICA DO CANVAS E DESENHO ---
+        const canvas = document.getElementById('simulation-canvas');
+        const ctx = canvas.getContext('2d');
+        const range = { x: [-10, 10], y: [-10, 10] };
+
+        const BASE_RADIUS = 8; 
+        const SCALE_FACTOR = 2;
+
+        function calculateRadius(charge) {
+            const chargeValue_nC = Math.abs(charge.q / 1e-9);
+            return BASE_RADIUS + (chargeValue_nC * SCALE_FACTOR);
+        }
+
+        function resizeCanvas() {
+            const size = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.9);
+            canvas.width = size;
+            canvas.height = size;
+            draw();
+        }
+        
+        function dataToPixel(point) {
+            const x = ((point[0] - range.x[0]) / (range.x[1] - range.x[0])) * canvas.width;
+            const y = (1 - (point[1] - range.y[0]) / (range.y[1] - range.y[0])) * canvas.height;
+            return { x, y };
+        }
+
+        function pixelToData(pixel) {
+            const x = (pixel.x / canvas.width) * (range.x[1] - range.x[0]) + range.x[0];
+            const y = (1 - (pixel.y / canvas.height)) * (range.y[1] - range.y[0]) + range.y[0];
+            return [x, y];
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const origin = dataToPixel([0, 0]);
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, origin.y); ctx.lineTo(canvas.width, origin.y);
+            ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, canvas.height);
+            ctx.stroke();
+
+            const positiveChargesForLines = charges.filter(c => c.q > 0);
+            positiveChargesForLines.forEach(pCharge => {
+                const numLines = Math.min(Math.floor(Math.abs(pCharge.q / 1e-9) * 8), 64);
+                for (let i = 0; i < numLines; i++) {
+                    const angle = (i / numLines) * 2 * Math.PI;
+                    const r = 0.25;
+                    const startX = pCharge.pos[0] + r * Math.cos(angle);
+                    const startY = pCharge.pos[1] + r * Math.sin(angle);
+                    
+                    const path = integrateFieldLine([startX, startY]);
+                    
+                    ctx.strokeStyle = 'purple';
+                    ctx.lineWidth = 1.5;
+                    ctx.globalAlpha = 0.6;
+                    ctx.beginPath();
+                    path.forEach((point, index) => {
+                        const p = dataToPixel(point);
+                        if (index === 0) ctx.moveTo(p.x, p.y);
+                        else ctx.lineTo(p.x, p.y);
+                    });
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
+                }
+            });
+
+            charges.forEach(charge => {
+                const p = dataToPixel(charge.pos);
+                const radius = calculateRadius(charge);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = charge.q > 0 ? '#ff3d3d' : '#0d6efd';
+                ctx.fill();
+            });
+        }
+        
+        // --- SEÇÃO DE FÍSICA E ANIMAÇÃO (CORRIGIDA) ---
+        function updatePhysics(dt) {
+            const damping = 0.98;
+            const minDistance = 0.5;
+
+            charges.forEach(charge1 => {
+                let netForce = [0, 0];
+                charges.forEach(charge2 => {
+                    if (charge1 === charge2) return;
+
+                    const rVec = vecSub(charge1.pos, charge2.pos);
+                    let rMag = vecNorm(rVec);
+                    if (rMag < minDistance) rMag = minDistance;
+                    
+                    const rUnitVec = vecScale(rVec, 1 / rMag);
+                    
+                    // --- ✅ CÁLCULO DE FORÇA CORRIGIDO ---
+                    // Usamos a FORCE_CONSTANT para escalar a força para um valor visível
+                    const forceMag = (FORCE_CONSTANT * charge1.q * charge2.q) / (rMag * rMag);
+                    const forceVec = vecScale(rUnitVec, forceMag);
+                    
+                    netForce = vecAdd(netForce, forceVec);
+                });
+                charge1.force = netForce;
+            });
+
+            charges.forEach(charge => {
+                if (charge === selectedCharge) return;
+
+                const acceleration = vecScale(charge.force, 1 / charge.mass);
+                charge.vel = vecAdd(charge.vel, vecScale(acceleration, dt));
+                charge.vel = vecScale(charge.vel, damping);
+                charge.pos = vecAdd(charge.pos, vecScale(charge.vel, dt));
+            });
+        }
+
+        function animationLoop(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+            
+            if (isSimulationRunning) {
+                updatePhysics(Math.min(dt, 0.05));
+            }
+            
+            draw();
+            requestAnimationFrame(animationLoop);
+        }
+
+        // --- MANIPULADORES DE EVENTOS ---
+        function addChargeHandler() {
+            const q_val_nC = parseFloat(document.getElementById('charge-value').value);
+            if (isNaN(q_val_nC) || q_val_nC === 0) {
+                updateAvatar(`<h4>Valor Inválido!</h4><p>Por favor, insira um valor de carga diferente de zero.</p>`, true);
+                return;
+            }
+            const newCharge = { 
+                q: q_val_nC * 1e-9, 
+                pos: [Math.random() * 4 - 2, Math.random() * 4 - 2], // Posição aleatória perto do centro
+                vel: [0, 0],
+                mass: 1.0
+            };
+            charges.push(newCharge);
+            initialChargesState.push(JSON.parse(JSON.stringify(newCharge)));
+            updateChargeListUI();
+            updateAvatar(`<h4>Carga de ${q_val_nC} nC Adicionada!</h4><p>Clique em 'Iniciar Simulação' para vê-la interagir.</p>`, true);
+        }
+
+        function removeCharge(index) {
+            charges.splice(index, 1);
+            initialChargesState.splice(index, 1);
+            updateChargeListUI();
+            updateAvatar(`<h4>Carga Removida!</h4><p>A simulação foi atualizada.</p>`, true);
+        }
+        
+        // --- INICIALIZAÇÃO E EVENTOS DO CANVAS ---
+        function init() {
+            document.getElementById('add-charge-btn').addEventListener('click', addChargeHandler);
+            document.getElementById('sound-toggle').addEventListener('click', () => {
+                isMuted = !isMuted;
+                document.getElementById('sound-toggle').innerText = isMuted ? '🔇' : '🔊';
+                speak(isMuted ? "Áudio desativado." : "Áudio ativado.");
+            });
+            
+            const toggleBtn = document.getElementById('toggle-simulation-btn');
+            toggleBtn.addEventListener('click', () => {
+                isSimulationRunning = !isSimulationRunning;
+                if(isSimulationRunning) {
+                    lastTimestamp = 0;
+                    toggleBtn.innerHTML = '⏸️ Pausar Simulação';
+                    toggleBtn.style.backgroundColor = '#ffc107';
+                    updateAvatar("<h4>Simulação iniciada!</h4><p>As cargas agora se movem de acordo com suas forças.</p>", true);
+                } else {
+                    toggleBtn.innerHTML = '▶️ Iniciar Simulação';
+                    toggleBtn.style.backgroundColor = '#0d6efd';
+                    updateAvatar("<h4>Simulação pausada.</h4><p>Você pode ajustar as posições ou adicionar mais cargas.</p>", true);
+                }
+            });
+
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                charges.forEach((charge, index) => {
+                    charge.pos = [...initialChargesState[index].pos];
+                    charge.vel = [0, 0];
+                });
+                updateAvatar("<h4>Posições resetadas!</h4><p>As cargas voltaram às suas posições originais.</p>", true);
+            });
+            
+            charges.push({ q: 2e-9, pos: [-4, 2], vel: [0, 0], mass: 1.0 });
+            charges.push({ q: -4e-9, pos: [4, -2], vel: [0, 0], mass: 1.0 });
+            
+            initialChargesState = JSON.parse(JSON.stringify(charges));
+            
+            updateChargeListUI();
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            updateAvatar(defaultAvatarMessage, true);
+            requestAnimationFrame(animationLoop);
+        }
+        
+        canvas.addEventListener('mousedown', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+
+            for (const charge of [...charges].reverse()) {
+                const chargePixelPos = dataToPixel(charge.pos);
+                const radius = calculateRadius(charge);
+                const distance = Math.sqrt((mouseX - chargePixelPos.x)**2 + (mouseY - chargePixelPos.y)**2);
+                
+                if (distance < radius) {
+                    selectedCharge = charge;
+                    selectedCharge.vel = [0, 0]; 
+                    const mouseDataPos = pixelToData({x: mouseX, y: mouseY});
+                    offsetX = mouseDataPos[0] - charge.pos[0];
+                    offsetY = mouseDataPos[1] - charge.pos[1];
+                    break;
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (selectedCharge) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+                const mouseDataPos = pixelToData({x: mouseX, y: mouseY});
+                selectedCharge.pos[0] = mouseDataPos[0] - offsetX;
+                selectedCharge.pos[1] = mouseDataPos[1] - offsetY;
+                selectedCharge.vel = [0, 0];
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (selectedCharge) {
+                selectedCharge.vel = [0, 0];
+                selectedCharge = null;
+                updateAvatar("<h4>Posição Atualizada!</h4><p>A simulação continua com a nova posição da carga.</p>", true);
+            }
+        });
+
+        window.onload = init;
+    </script>
+
+</body>
+</html>

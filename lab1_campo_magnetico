@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <title>Simulador de Campo Magnético Interativo</title>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif; margin: 0; padding: 0; overflow: hidden;
+            background-color: #eef1f5; display: flex; justify-content: center; align-items: center; height: 100vh;
+        }
+        #simulation-canvas {
+            border: 1px solid #ccc; background-color: #0c0c1f; cursor: grab;
+        }
+        #simulation-canvas:active { cursor: grabbing; }
+        .controls-panel {
+            position: fixed; top: 15px; left: 15px; z-index: 100;
+            background: rgba(255, 255, 255, 0.98); padding: 15px; border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); border: 1px solid rgba(0, 0, 0, 0.1);
+            width: 320px;
+        }
+        .controls-panel h3, .controls-panel h4 { margin-top: 0; border-bottom: 2px solid #0d6efd; padding-bottom: 8px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { font-weight: bold; display: block; margin-bottom: 5px; font-size: 14px; }
+        .form-group input, .controls-panel button {
+            width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px;
+            border: 1px solid #ccc; font-size: 15px;
+        }
+        .controls-panel button { background-color: #0d6efd; color: white; cursor: pointer; transition: background-color 0.2s; margin-top: 10px; }
+        .controls-panel button:hover { background-color: #0b5ed7; }
+        #item-list { list-style-type: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; }
+        #item-list li { display: flex; justify-content: space-between; align-items: center; padding: 6px;
+            border-radius: 6px; margin-bottom: 5px; background-color: #f8f9fa; font-size: 14px; }
+        #item-list li .remove-btn { background: #dc3545; color: white; border: none; border-radius: 4px;
+            cursor: pointer; padding: 3px 8px; margin: 0; }
+        .control-section { border-top: 1px solid #eee; padding-top: 15px; margin-top: 15px; }
+
+        /* --- Avatar --- */
+        .avatar-container { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; align-items: flex-end; }
+        #avatar-wrapper { position: relative; width: 150px; height: 185px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); animation: float 4s ease-in-out infinite; }
+        .avatar-head { position: absolute; top: 0; left: 0; width: 150px; height: 150px; z-index: 10; }
+        .avatar-img { width: 100%; height: 100%; border-radius: 50%; border: 4px solid #fff; box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); transition: box-shadow 0.3s ease-in-out; }
+        .avatar-speaking { animation: pulse-glow 1.5s infinite; }
+        .avatar-neck { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 30px; height: 15px; background-color: #495057; z-index: 6; }
+        .avatar-body { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 50px; background-color: #0d6efd; border-radius: 60px 60px 20px 20px; box-shadow: inset 0 -10px 20px rgba(0,0,0,0.2); z-index: 5; }
+        .eye { position: absolute; background: white; border-radius: 50%; width: 30px; height: 38px; }
+        .left-eye { top: 55px; left: 35px; }
+        .right-eye { top: 55px; left: 85px; }
+        .pupil { position: absolute; background: #222; width: 16px; height: 16px; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        .speech-bubble { background: #fff; border: 2px solid #0d6efd; border-radius: 15px; padding: 20px; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 16px; margin-right: 20px; }
+        .speech-bubble h3 { margin-top: 0; color: #0b5ed7; }
+        #sound-toggle { position: absolute; top: 10px; right: 10px; z-index: 15; width: 30px; height: 30px; background: #fff; border-radius: 50%; border: 1px solid #ccc; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes pulse-glow { 0% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } 50% { box-shadow: 0 0 30px rgba(13, 110, 253, 1), 0 0 40px rgba(13, 110, 253, 0.8); } 100% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } }
+    </style>
+</head>
+<body>
+
+    <div class="controls-panel">
+        <h3>Controles da Simulação</h3>
+        <p>Arraste os fios para alterar o campo magnético. Partículas são geradas automaticamente.</p>
+        <div class="control-section">
+            <h4>Fios de Corrente</h4>
+            <div class="form-group">
+                <label for="current-value">Valor da Corrente (A, use '-' para negativo)</label>
+                <input type="number" id="current-value" value="50" step="10">
+            </div>
+            <button id="add-wire-btn">Adicionar Fio</button>
+        </div>
+        <div class="control-section">
+             <button id="reset-btn" style="background-color: #6c757d;">🔄 Limpar Partículas</button>
+             <h4>Fios Ativos:</h4>
+             <ul id="item-list"></ul>
+        </div>
+    </div>
+
+    <div class="avatar-container">
+        <div class="speech-bubble" id="avatar-speech">
+            <h3>Olá!</h3>
+            <p>Vamos começar!</p>
+        </div>
+        <div id="avatar-wrapper">
+            <div class="avatar-body"></div>
+            <div class="avatar-neck"></div>
+            <div class="avatar-head">
+                <img src="data:image/jpeg;base64,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" class="avatar-img" id="avatar-img">
+                <div class="eye left-eye"><div class="pupil"></div></div>
+                <div class="eye right-eye"><div class="pupil"></div></div>
+                <button id="sound-toggle">🔇</button>
+            </div>
+        </div>
+    </div>
+    
+    <canvas id="simulation-canvas"></canvas>
+
+    <script>
+        // --- CONFIGURAÇÕES GLOBAIS E ESTADO DA APLICAÇÃO ---
+        let currentWires = [];
+        let testParticles = [];
+        let selectedWire = null;
+        let offsetX = 0, offsetY = 0;
+        let particleSpawnCounter = 0;
+        let isMuted = true;
+        
+        // --- CONSTANTES FÍSICAS E VISUAIS ---
+        const MU_0 = 4 * Math.PI * 1e-7;
+        const ELEMENTARY_CHARGE = 1.602e-19;
+        const SIMULATION_FORCE_SCALE = 1e11; 
+        const BASE_RADIUS_PIXELS = 10;
+        const RADIUS_SCALE_FACTOR = 0.08;
+
+        // --- LÓGICA DE VETORES ---
+        const vecSub = (v1, v2) => [v1[0] - v2[0], v1[1] - v2[1]];
+        const vecNorm = (v) => Math.sqrt(v[0]**2 + v[1]**2);
+        const vecScale = (v, s) => [v[0] * s, v[1] * s];
+        const vecAdd = (v1, v2) => [v1[0] + v2[0], v1[1] + v2[1]];
+
+        // --- LÓGICA DE CÁLCULO DE CAMPO MAGNÉTICO ---
+        function getMagneticFieldAtPoint(point) {
+            let netField = [0, 0];
+            currentWires.forEach(wire => {
+                const rVec = vecSub(point, wire.pos);
+                const rMag = vecNorm(rVec);
+                if (rMag < 0.1) return;
+                const B_mag = (MU_0 * wire.i) / (2 * Math.PI * rMag);
+                const B_dir = [-rVec[1] / rMag, rVec[0] / rMag];
+                netField = vecAdd(netField, vecScale(B_dir, B_mag));
+            });
+            return netField;
+        }
+        
+        // --- LÓGICA DO AVATAR ---
+        const avatarImg = document.getElementById('avatar-img');
+        function speak(text) {
+            if (isMuted || !('speechSynthesis' in window)) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            utterance.rate = 1.1;
+            utterance.onstart = () => avatarImg.classList.add('avatar-speaking');
+            utterance.onend = () => avatarImg.classList.remove('avatar-speaking');
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            const pupils = document.querySelectorAll('.pupil');
+            pupils.forEach(pupil => {
+                const rect = pupil.parentElement.getBoundingClientRect();
+                const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                const rad = Math.atan2(e.pageY - y, e.pageX - x);
+                const rot = (rad * (180 / Math.PI) * -1) + 270;
+                pupil.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+            });
+        });
+
+        function updateAvatar(message, shouldSpeak = false) {
+            document.getElementById('avatar-speech').innerHTML = message;
+            if (shouldSpeak) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = message;
+                speak(tempDiv.textContent || "");
+            }
+        }
+
+        // --- FUNÇÕES DE ATUALIZAÇÃO DA UI ---
+        function updateItemListUI() {
+            const listElement = document.getElementById('item-list');
+            listElement.innerHTML = '';
+            currentWires.forEach((wire, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>Fio: ${wire.i.toFixed(0)} A</span><button class="remove-btn" onclick="removeItem(${index})">X</button>`;
+                listElement.appendChild(li);
+            });
+        }
+        
+        // --- LÓGICA DO CANVAS E DESENHO ---
+        const canvas = document.getElementById('simulation-canvas');
+        const ctx = canvas.getContext('2d');
+        const range = { x: [-10, 10], y: [-10, 10] };
+
+        function resizeCanvas() {
+            const size = Math.min(window.innerWidth * 0.85, window.innerHeight * 0.9);
+            canvas.width = size;
+            canvas.height = size;
+        }
+        
+        function dataToPixel(point) {
+            const x = ((point[0] - range.x[0]) / (range.x[1] - range.x[0])) * canvas.width;
+            const y = (1 - (point[1] - range.y[0]) / (range.y[1] - range.y[0])) * canvas.height;
+            return { x, y };
+        }
+
+        function pixelToData(pixel) {
+            const x = (pixel.x / canvas.width) * (range.x[1] - range.x[0]) + range.x[0];
+            const y = (1 - (pixel.y / canvas.height)) * (range.y[1] - range.y[0]) + range.y[0];
+            return [x, y];
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const gridSize = 20;
+            for (let i = 0; i < gridSize; i++) {
+                for (let j = 0; j < gridSize; j++) {
+                    const x = range.x[0] + (i / (gridSize-1)) * (range.x[1] - range.x[0]);
+                    const y = range.y[0] + (j / (gridSize-1)) * (range.y[1] - range.y[0]);
+                    const B = getMagneticFieldAtPoint([x, y]);
+                    const B_mag = vecNorm(B);
+                    if (B_mag === 0) continue;
+                    const B_unit = vecScale(B, 1 / B_mag);
+                    const pStart = dataToPixel([x, y]);
+                    const pEnd = dataToPixel([x + B_unit[0] * 0.5, y + B_unit[1] * 0.5]);
+                    const strength = Math.min(B_mag * 5e5, 1.0);
+                    ctx.strokeStyle = `rgba(0, 255, 150, ${0.1 + strength * 0.6})`;
+                    ctx.lineWidth = 1 + strength;
+                    ctx.beginPath(); ctx.moveTo(pStart.x, pStart.y); ctx.lineTo(pEnd.x, pEnd.y); ctx.stroke();
+                }
+            }
+
+            currentWires.forEach(wire => {
+                const p = dataToPixel(wire.pos);
+                const radius = BASE_RADIUS_PIXELS + Math.abs(wire.i) * RADIUS_SCALE_FACTOR;
+                const symbolSize = radius * 1.2;
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(p.x, p.y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = (wire === selectedWire) ? 'rgba(255, 255, 0, 0.3)' : 'rgba(255, 255, 255, 0.2)';
+                ctx.strokeStyle = wire.i > 0 ? '#ff8a80' : '#80d8ff';
+                ctx.fill(); ctx.stroke();
+                ctx.font = `bold ${symbolSize}px sans-serif`; 
+                ctx.fillStyle = wire.i > 0 ? '#ff8a80' : '#80d8ff';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(wire.i > 0 ? '⊙' : '⊗', p.x, p.y);
+            });
+
+            testParticles.forEach(p => {
+                if (p.trail.length > 1) {
+                    ctx.beginPath(); const startPoint = dataToPixel(p.trail[0]); ctx.moveTo(startPoint.x, startPoint.y);
+                    ctx.strokeStyle = p.q > 0 ? '#ffeb3b' : '#ff4081'; ctx.lineWidth = 2;
+                    p.trail.forEach(pos => { const point = dataToPixel(pos); ctx.lineTo(point.x, point.y); });
+                    ctx.stroke();
+                }
+                const pos = dataToPixel(p.pos);
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = p.q > 0 ? '#ffeb3b' : '#ff4081'; ctx.fill();
+            });
+        }
+        
+        // --- GERAÇÃO AUTOMÁTICA DE PARTÍCULAS ---
+        function spawnNewParticle() {
+            const edge = Math.floor(Math.random() * 4);
+            let pos, vel;
+            const speed = 2;
+            switch(edge) {
+                case 0: pos = [Math.random() * 20 - 10, 11]; vel = [0, -speed]; break;
+                case 1: pos = [11, Math.random() * 20 - 10]; vel = [-speed, 0]; break;
+                case 2: pos = [Math.random() * 20 - 10, -11]; vel = [0, speed]; break;
+                case 3: pos = [-11, Math.random() * 20 - 10]; vel = [speed, 0]; break;
+            }
+            const charge = Math.random() > 0.5 ? 1 : -1;
+            const vel_z = 20000 + (Math.random() * 10000 - 5000);
+            testParticles.push({
+                q: charge * ELEMENTARY_CHARGE, pos: pos, vel: [vel[0], vel[1], vel_z],
+                mass: 9.11e-31, trail: [pos], toRemove: false
+            });
+            if (testParticles.length > 100) testParticles.shift();
+        }
+
+        // --- SEÇÃO DE FÍSICA E ANIMAÇÃO ---
+        function updatePhysics(dt) {
+            particleSpawnCounter++;
+            if (particleSpawnCounter > 20) {
+                spawnNewParticle();
+                particleSpawnCounter = 0;
+            }
+            testParticles.forEach(p => {
+                const B = getMagneticFieldAtPoint(p.pos);
+                const forceXY = [-p.q * p.vel[2] * B[1], p.q * p.vel[2] * B[0]];
+                const scaledForce = vecScale(forceXY, SIMULATION_FORCE_SCALE);
+                const acceleration = vecScale(scaledForce, 1 / p.mass);
+                p.vel[0] += acceleration[0] * dt; p.vel[1] += acceleration[1] * dt;
+                p.pos[0] += p.vel[0] * dt; p.pos[1] += p.vel[1] * dt;
+                p.trail.push([...p.pos]);
+                if (p.trail.length > 100) p.trail.shift();
+                if (vecNorm(p.pos) > 15) p.toRemove = true;
+            });
+            if (testParticles.some(p => p.toRemove)) {
+                testParticles = testParticles.filter(p => !p.toRemove);
+            }
+        }
+
+        let lastTimestamp = 0;
+        function animationLoop(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+            updatePhysics(Math.min(dt, 0.05));
+            draw();
+            requestAnimationFrame(animationLoop);
+        }
+
+        // --- MANIPULADORES DE EVENTOS ---
+        function addWireHandler() {
+            const current = parseFloat(document.getElementById('current-value').value);
+            if (isNaN(current) || current === 0) {
+                updateAvatar("<h4>Valor inválido!</h4><p>Por favor, insira um valor de corrente diferente de zero.</p>", true);
+                return;
+            }
+            currentWires.push({ i: current, pos: [0,0] });
+            updateItemListUI();
+            updateAvatar(`<h4>Fio Adicionado!</h4><p>Um fio com ${current.toFixed(0)} A foi colocado na origem.</p>`, true);
+        }
+        window.removeItem = function(index) {
+            currentWires.splice(index, 1);
+            updateItemListUI();
+            updateAvatar("<h4>Fio Removido!</h4><p>O campo magnético foi atualizado.</p>", true);
+        }
+        
+        // --- INICIALIZAÇÃO ---
+        function init() {
+            document.getElementById('add-wire-btn').addEventListener('click', addWireHandler);
+            document.getElementById('reset-btn').addEventListener('click', () => { 
+                testParticles.length = 0; 
+                // --- CORREÇÃO ---
+                // Reinicia o contador para que a limpeza seja visível
+                particleSpawnCounter = 0;
+                updateAvatar("<h4>Partículas Limpas!</h4><p>Todo o rastro de partículas foi removido.</p>", true);
+            });
+            document.getElementById('sound-toggle').addEventListener('click', () => {
+                isMuted = !isMuted;
+                document.getElementById('sound-toggle').innerText = isMuted ? '🔇' : '🔊';
+                speak(isMuted ? "Áudio desativado." : "Áudio ativado.");
+            });
+
+            currentWires.push({ i: 100, pos: [-5, 0] });
+            currentWires.push({ i: -100, pos: [5, 0] });
+            
+            updateItemListUI();
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            updateAvatar("<h3>Bem-vindo!</h3><p>Adicione fios de corrente, arraste-os e veja como as partículas se comportam no campo magnético!</p>", true);
+            animationLoop();
+        }
+
+        // --- Eventos do mouse para arrastar os fios ---
+        canvas.addEventListener('mousedown', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            for (const wire of [...currentWires].reverse()) {
+                const wirePixelPos = dataToPixel(wire.pos);
+                const radius = BASE_RADIUS_PIXELS + Math.abs(wire.i) * RADIUS_SCALE_FACTOR;
+                const distance = Math.sqrt((mouseX - wirePixelPos.x)**2 + (mouseY - wirePixelPos.y)**2);
+                if (distance < radius) {
+                    selectedWire = wire;
+                    const mouseDataPos = pixelToData({x: mouseX, y: mouseY});
+                    offsetX = mouseDataPos[0] - wire.pos[0];
+                    offsetY = mouseDataPos[1] - wire.pos[1];
+                    break;
+                }
+            }
+        });
+        canvas.addEventListener('mousemove', (event) => {
+            if (selectedWire) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+                const mouseDataPos = pixelToData({x: mouseX, y: mouseY});
+                selectedWire.pos[0] = mouseDataPos[0] - offsetX;
+                selectedWire.pos[1] = mouseDataPos[1] - offsetY;
+            }
+        });
+        canvas.addEventListener('mouseup', () => { selectedWire = null; });
+        
+        window.onload = init;
+    </script>
+
+</body>
+</html>

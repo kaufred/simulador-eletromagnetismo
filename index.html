@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratório de Eletromagnetismo</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3-array.v3.min.js"></script>
+    <script src="https://d3js.org/d3-contour.v4.min.js"></script>
+    
+    <style>
+        /* --- Estilos Globais e da Interface de Abas --- */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #eef1f5;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .tab-navigation {
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+            background-color: #343a40;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            flex-shrink: 0;
+            z-index: 200; /* Garante que as abas fiquem acima de tudo */
+        }
+
+        .tab-button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            background-color: #6c757d;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        .tab-button:hover {
+            background-color: #5a6268;
+        }
+
+        .tab-button.active {
+            background-color: #0d6efd;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(13, 110, 253, 0.4);
+        }
+
+        .simulation-container {
+            flex-grow: 1;
+            position: relative; /* Necessário para elementos 'fixed' ou 'absolute' dentro dos simuladores */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- Estilos Escopados para o Simulador de CAMPO MAGNÉTICO --- */
+        #magnetic-container #simulation-canvas { border: 1px solid #ccc; background-color: #0c0c1f; cursor: grab; }
+        #magnetic-container #simulation-canvas:active { cursor: grabbing; }
+        #magnetic-container .controls-panel { position: fixed; top: 75px; left: 15px; z-index: 100; background: rgba(255, 255, 255, 0.98); padding: 15px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); border: 1px solid rgba(0, 0, 0, 0.1); width: 320px; }
+        #magnetic-container .controls-panel h3, #magnetic-container .controls-panel h4 { margin-top: 0; border-bottom: 2px solid #0d6efd; padding-bottom: 8px; }
+        #magnetic-container .form-group { margin-bottom: 12px; }
+        #magnetic-container .form-group label { font-weight: bold; display: block; margin-bottom: 5px; font-size: 14px; }
+        #magnetic-container .form-group input, #magnetic-container .controls-panel button { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 15px; }
+        #magnetic-container .controls-panel button { background-color: #0d6efd; color: white; cursor: pointer; transition: background-color 0.2s; margin-top: 10px; }
+        #magnetic-container .controls-panel button:hover { background-color: #0b5ed7; }
+        #magnetic-container #item-list { list-style-type: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; }
+        #magnetic-container #item-list li { display: flex; justify-content: space-between; align-items: center; padding: 6px; border-radius: 6px; margin-bottom: 5px; background-color: #f8f9fa; font-size: 14px; }
+        #magnetic-container #item-list li .remove-btn { background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 3px 8px; margin: 0; }
+        #magnetic-container .control-section { border-top: 1px solid #eee; padding-top: 15px; margin-top: 15px; }
+        #magnetic-container .avatar-container { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; align-items: flex-end; }
+        #magnetic-container #avatar-wrapper { position: relative; width: 150px; height: 185px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); animation: magnetic-float 4s ease-in-out infinite; }
+        #magnetic-container .avatar-head { position: absolute; top: 0; left: 0; width: 150px; height: 150px; z-index: 10; }
+        #magnetic-container .avatar-img { width: 100%; height: 100%; border-radius: 50%; border: 4px solid #fff; box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); transition: box-shadow 0.3s ease-in-out; }
+        #magnetic-container .avatar-speaking { animation: magnetic-pulse-glow 1.5s infinite; }
+        #magnetic-container .avatar-neck { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 30px; height: 15px; background-color: #495057; z-index: 6; }
+        #magnetic-container .avatar-body { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 50px; background-color: #0d6efd; border-radius: 60px 60px 20px 20px; box-shadow: inset 0 -10px 20px rgba(0,0,0,0.2); z-index: 5; }
+        #magnetic-container .eye { position: absolute; background: white; border-radius: 50%; width: 30px; height: 38px; }
+        #magnetic-container .left-eye { top: 55px; left: 35px; }
+        #magnetic-container .right-eye { top: 55px; left: 85px; }
+        #magnetic-container .pupil { position: absolute; background: #222; width: 16px; height: 16px; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #magnetic-container .speech-bubble { background: #fff; border: 2px solid #0d6efd; border-radius: 15px; padding: 20px; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 16px; margin-right: 20px; }
+        #magnetic-container .speech-bubble h3 { margin-top: 0; color: #0b5ed7; }
+        #magnetic-container #sound-toggle { position: absolute; top: 10px; right: 10px; z-index: 15; width: 30px; height: 30px; background: #fff; border-radius: 50%; border: 1px solid #ccc; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+        @keyframes magnetic-float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes magnetic-pulse-glow { 0% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } 50% { box-shadow: 0 0 30px rgba(13, 110, 253, 1), 0 0 40px rgba(13, 110, 253, 0.8); } 100% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } }
+
+        /* --- Estilos Escopados para o Simulador de CAMPO ELÉTRICO (ESTÁTICO) --- */
+        #static-electric-container { width: 100%; height: 100%; background-color: #f9fafb; overflow-y: auto; } /* Usa cor de fundo do Tailwind */
+        #static-electric-container canvas { background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 0.5rem; touch-action: none; }
+        #static-electric-container input[type="number"] { -moz-appearance: textfield; }
+        #static-electric-container input[type="number"]::-webkit-outer-spin-button, #static-electric-container input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        #static-electric-container .avatar-container { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; align-items: flex-end; }
+        #static-electric-container #avatar-wrapper { position: relative; width: 150px; height: 185px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); animation: static-electric-float 4s ease-in-out infinite; }
+        #static-electric-container .avatar-head { position: absolute; top: 0; left: 0; width: 150px; height: 150px; z-index: 10; }
+        #static-electric-container .avatar-img { width: 100%; height: 100%; border-radius: 50%; border: 4px solid #fff; box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); transition: box-shadow 0.3s ease-in-out; }
+        #static-electric-container .avatar-speaking { animation: static-electric-pulse-glow 1.5s infinite; }
+        #static-electric-container .avatar-neck { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 30px; height: 15px; background-color: #495057; z-index: 6; }
+        #static-electric-container .avatar-body { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 50px; background-color: #0d6efd; border-radius: 60px 60px 20px 20px; box-shadow: inset 0 -10px 20px rgba(0,0,0,0.2); z-index: 5; }
+        #static-electric-container .eye { position: absolute; background: white; border-radius: 50%; width: 30px; height: 38px; }
+        #static-electric-container .left-eye { top: 55px; left: 35px; }
+        #static-electric-container .right-eye { top: 55px; left: 85px; }
+        #static-electric-container .pupil { position: absolute; background: #222; width: 16px; height: 16px; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #static-electric-container .speech-bubble { background: #fff; border: 2px solid #0d6efd; border-radius: 15px; padding: 20px; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 16px; margin-right: 20px; }
+        #static-electric-container .speech-bubble h3 { margin-top: 0; color: #0b5ed7; }
+        #static-electric-container #sound-toggle { position: absolute; top: 10px; right: 10px; z-index: 15; width: 30px; height: 30px; background: #fff; border-radius: 50%; border: 1px solid #ccc; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+        @keyframes static-electric-float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes static-electric-pulse-glow { 0% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } 50% { box-shadow: 0 0 30px rgba(13, 110, 253, 1), 0 0 40px rgba(13, 110, 253, 0.8); } 100% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } }
+
+        /* --- Estilos Escopados para o Simulador de CAMPO ELÉTRICO (DINÂMICO) --- */
+        #dynamic-electric-container #simulation-canvas { border: 1px solid #ccc; background-color: #fff; }
+        #dynamic-electric-container .controls-panel { position: fixed; top: 75px; left: 20px; z-index: 100; background: rgba(255, 255, 255, 0.98); padding: 20px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); border: 1px solid rgba(0, 0, 0, 0.1); width: 280px; }
+        #dynamic-electric-container .controls-panel h3 { margin-top: 0; border-bottom: 2px solid #0d6efd; padding-bottom: 10px; }
+        #dynamic-electric-container .form-group { margin-bottom: 15px; }
+        #dynamic-electric-container .form-group label { font-weight: bold; display: block; margin-bottom: 5px; }
+        #dynamic-electric-container .form-group input, #dynamic-electric-container .controls-panel button { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; }
+        #dynamic-electric-container .controls-panel button { background-color: #0d6efd; color: white; cursor: pointer; transition: background-color 0.2s; margin-top: 10px; }
+        #dynamic-electric-container .controls-panel button:hover { background-color: #0b5ed7; }
+        #dynamic-electric-container #charge-list-container { margin-top: 20px; }
+        #dynamic-electric-container #charge-list { list-style-type: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; }
+        #dynamic-electric-container #charge-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-radius: 6px; margin-bottom: 5px; background-color: #f8f9fa; }
+        #dynamic-electric-container #charge-list li .remove-btn { background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 3px 8px; margin: 0; }
+        #dynamic-electric-container .avatar-container { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; align-items: flex-end; }
+        #dynamic-electric-container #avatar-wrapper { position: relative; width: 150px; height: 185px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); animation: dynamic-electric-float 4s ease-in-out infinite; }
+        #dynamic-electric-container .avatar-head { position: absolute; top: 0; left: 0; width: 150px; height: 150px; z-index: 10; }
+        #dynamic-electric-container .avatar-img { width: 100%; height: 100%; border-radius: 50%; border: 4px solid #fff; box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); transition: box-shadow 0.3s ease-in-out; }
+        #dynamic-electric-container .avatar-speaking { animation: dynamic-electric-pulse-glow 1.5s infinite; }
+        #dynamic-electric-container .avatar-neck { position: absolute; top: 135px; left: 50%; transform: translateX(-50%); width: 30px; height: 15px; background-color: #495057; z-index: 6; }
+        #dynamic-electric-container .avatar-body { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 50px; background-color: #0d6efd; border-radius: 60px 60px 20px 20px; box-shadow: inset 0 -10px 20px rgba(0,0,0,0.2); z-index: 5; }
+        #dynamic-electric-container .eye { position: absolute; background: white; border-radius: 50%; width: 30px; height: 38px; }
+        #dynamic-electric-container .left-eye { top: 55px; left: 35px; }
+        #dynamic-electric-container .right-eye { top: 55px; left: 85px; }
+        #dynamic-electric-container .pupil { position: absolute; background: #222; width: 16px; height: 16px; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #dynamic-electric-container .speech-bubble { background: #fff; border: 2px solid #0d6efd; border-radius: 15px; padding: 20px; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 16px; margin-right: 20px; }
+        #dynamic-electric-container .speech-bubble h3 { margin-top: 0; color: #0b5ed7; }
+        #dynamic-electric-container #sound-toggle { position: absolute; top: 10px; right: 10px; z-index: 15; width: 30px; height: 30px; background: #fff; border-radius: 50%; border: 1px solid #ccc; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+        @keyframes dynamic-electric-float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes dynamic-electric-pulse-glow { 0% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } 50% { box-shadow: 0 0 30px rgba(13, 110, 253, 1), 0 0 40px rgba(13, 110, 253, 0.8); } 100% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } }
+
+    </style>
+</head>
+<body>
+
+    <div class="tab-navigation">
+        <button class="tab-button" id="tab-magnetic" onclick="showTab('magnetic')">Campo Magnético</button>
+        <button class="tab-button" id="tab-static-electric" onclick="showTab('static_electric')">Cuba Eletrolítica</button>
+        <button class="tab-button" id="tab-dynamic-electric" onclick="showTab('dynamic_electric')">Campo Elétrico (Dinâmico)</button>
+    </div>
+
+    <div id="magnetic-container" class="simulation-container" style="display: none;">
+        <div class="controls-panel">
+            <h3>Controles da Simulação</h3>
+            <p>Arraste os fios para alterar o campo magnético. Partículas são geradas automaticamente.</p>
+            <div class="control-section">
+                <h4>Fios de Corrente</h4>
+                <div class="form-group">
+                    <label for="current-value">Valor da Corrente (A, use '-' para negativo)</label>
+                    <input type="number" id="current-value" value="50" step="10">
+                </div>
+                <button id="add-wire-btn">Adicionar Fio</button>
+            </div>
+            <div class="control-section">
+                 <button id="reset-btn" style="background-color: #6c757d;">🔄 Limpar Partículas</button>
+                 <h4>Fios Ativos:</h4>
+                 <ul id="item-list"></ul>
+            </div>
+        </div>
+        <div class="avatar-container">
+            <div class="speech-bubble" id="avatar-speech-magnetic">
+                <h3>Olá!</h3>
+                <p>Vamos começar!</p>
+            </div>
+            <div id="avatar-wrapper">
+                <div class="avatar-body"></div>
+                <div class="avatar-neck"></div>
+                <div class="avatar-head">
+                    <img src="data:image/jpeg;base64,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" class="avatar-img" id="avatar-img-magnetic">
+                    <div class="eye left-eye"><div class="pupil"></div></div>
+                    <div class="eye right-eye"><div class="pupil"></div></div>
+                    <button id="sound-toggle-magnetic">🔇</button>
+                </div>
+            </div>
+        </div>
+        <canvas id="simulation-canvas-magnetic"></canvas>
+    </div>
+
+    <div id="static-electric-container" class="simulation-container" style="display: none;">
+        <div class="container mx-auto p-4 md:p-8">
+            <h1 class="text-3xl font-bold text-center text-blue-700 mb-6">Simulador de Campo Elétrico e Potencial</h1>
+            <p class="text-center text-gray-600 mb-8 max-w-2xl mx-auto">
+                Configure os valores e posições de duas cargas pontuais. O gráfico mostrará as
+                <span class="font-semibold text-gray-700">linhas equipotenciais</span>
+                (cinza) e os vetores do campo elétrico (setas pretas).
+                <span class="block text-sm mt-2">Você pode clicar e arrastar as cargas no visualizador.</span>
+            </p>
+            <div class="flex flex-col lg:flex-row gap-8">
+                <div class="w-full lg:w-1/3 xl:w-1/4">
+                    <form id="simForm" class="bg-white p-6 rounded-lg shadow-lg space-y-6">
+                        <fieldset class="border border-gray-300 p-4 rounded-md">
+                            <legend class="text-lg font-semibold text-blue-600 px-2">Carga 1</legend>
+                            <div class="space-y-3">
+                                <div><label for="q1_val" class="block text-sm font-medium text-gray-700">Valor (C)</label><input type="number" id="q1_val" value="1e-9" step="any" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"></div>
+                                <div><label for="q1_x" class="block text-sm font-medium text-gray-700">Posição X (m)</label><input type="number" id="q1_x" value="-0.5" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"></div>
+                                <div><label for="q1_y" class="block text-sm font-medium text-gray-700">Posição Y (m)</label><input type="number" id="q1_y" value="0.0" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"></div>
+                            </div>
+                        </fieldset>
+                        <fieldset class="border border-gray-300 p-4 rounded-md">
+                            <legend class="text-lg font-semibold text-red-600 px-2">Carga 2</legend>
+                            <div class="space-y-3">
+                                <div><label for="q2_val" class="block text-sm font-medium text-gray-700">Valor (C)</label><input type="number" id="q2_val" value="-1e-9" step="any" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"></div>
+                                <div><label for="q2_x" class="block text-sm font-medium text-gray-700">Posição X (m)</label><input type="number" id="q2_x" value="0.5" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"></div>
+                                <div><label for="q2_y" class="block text-sm font-medium text-gray-700">Posição Y (m)</label><input type="number" id="q2_y" value="0.0" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"></div>
+                            </div>
+                        </fieldset>
+                        <p class="text-xs text-gray-500 text-center">Os valores são atualizados automaticamente.</p>
+                    </form>
+                </div>
+                <div class="w-full lg:w-2/3 xl:w-3/4 flex justify-center items-start">
+                    <canvas id="simCanvas-static" width="600" height="600"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="avatar-container">
+            <div class="speech-bubble" id="avatar-speech-static">
+                <h3>Olá! Bem-vindo ao Simulador!</h3>
+                <p>Configure os valores, clique e arraste as cargas para ver o campo se ajustar!</p>
+            </div>
+            <div id="avatar-wrapper">
+                <div class="avatar-body"></div><div class="avatar-neck"></div>
+                <div class="avatar-head">
+                    <img src="data:image/jpeg;base64,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" class="avatar-img" id="avatar-img-static">
+                    <div class="eye left-eye"><div class="pupil"></div></div>
+                    <div class="eye right-eye"><div class="pupil"></div></div>
+                    <button id="sound-toggle-static">🔇</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dynamic-electric-container" class="simulation-container" style="display: none;">
+        <div class="controls-panel">
+            <h3>Controle de Cargas</h3>
+            <div class="form-group">
+                <label for="charge-value">Valor da Carga (use '-' para negativa)</label>
+                <input type="number" id="charge-value" value="1.0" step="0.5">
+            </div>
+            <button id="add-charge-btn">Adicionar Carga no Centro</button>
+            <button id="toggle-simulation-btn">▶️ Iniciar Simulação</button>
+            <button id="reset-btn-dynamic" style="background-color: #6c757d;">🔄 Resetar Posições</button>
+            <div id="charge-list-container">
+                <h4>Cargas Ativas:</h4>
+                <ul id="charge-list"></ul>
+            </div>
+        </div>
+        <div class="avatar-container">
+            <div class="speech-bubble" id="avatar-speech-dynamic">
+                <h3>Olá! Bem-vindo ao Simulador!</h3>
+                <p>Adicione cargas e clique em <b>Iniciar Simulação</b> para vê-las interagir. Você também pode arrastá-las!</p>
+            </div>
+            <div id="avatar-wrapper">
+                <div class="avatar-body"></div>
+                <div class="avatar-neck"></div>
+                <div class="avatar-head">
+                    <img src="data:image/jpeg;base64,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" class="avatar-img" id="avatar-img-dynamic">
+                    <div class="eye left-eye"><div class="pupil"></div></div>
+                    <div class="eye right-eye"><div class="pupil"></div></div>
+                    <button id="sound-toggle-dynamic">🔇</button>
+                </div>
+            </div>
+        </div>
+        <canvas id="simulation-canvas-dynamic"></canvas>
+    </div>
+
+    <script>
+        // --- LÓGICA DE CONTROLE DAS ABAS ---
+
+        const initializedSims = {
+            magnetic: false,
+            static_electric: false,
+            dynamic_electric: false
+        };
+
+        function showTab(simId) {
+            // Esconde todos os containers
+            document.getElementById('magnetic-container').style.display = 'none';
+            document.getElementById('static-electric-container').style.display = 'none';
+            document.getElementById('dynamic-electric-container').style.display = 'none';
+
+            // Remove a classe 'active' de todos os botões
+            document.getElementById('tab-magnetic').classList.remove('active');
+            document.getElementById('tab-static-electric').classList.remove('active');
+            document.getElementById('tab-dynamic-electric').classList.remove('active');
+
+            // Mostra o container e ativa o botão selecionado
+            const containerId = simId.replace(/_/g, '-') + '-container';
+            const tabId = 'tab-' + simId.replace(/_/g, '-');
+            
+            document.getElementById(containerId).style.display = 'flex'; // Usar flex para centralizar
+            if (simId === 'static_electric') { // O estático tem um layout diferente
+                 document.getElementById(containerId).style.display = 'block';
+            }
+            document.getElementById(tabId).classList.add('active');
+
+            // Inicializa o simulador se for a primeira vez
+            if (!initializedSims[simId]) {
+                switch (simId) {
+                    case 'magnetic':
+                        initMagneticSim();
+                        break;
+                    case 'static_electric':
+                        initStaticElectricSim();
+                        break;
+                    case 'dynamic_electric':
+                        initDynamicElectricSim();
+                        break;
+                }
+                initializedSims[simId] = true;
+            }
+            
+            // Dispara um evento de resize para que o canvas se ajuste corretamente ao ser exibido
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        // --- CÓDIGO DO SIMULADOR DE CAMPO MAGNÉTICO (ENCAPSULADO) ---
+        function initMagneticSim() {
+            const container = document.getElementById('magnetic-container');
+            const canvas = container.querySelector('#simulation-canvas-magnetic');
+            const ctx = canvas.getContext('2d');
+            let currentWires = [];
+            let testParticles = [];
+            let selectedWire = null;
+            let offsetX = 0, offsetY = 0;
+            let particleSpawnCounter = 0;
+            let isMuted = true;
+            const MU_0 = 4 * Math.PI * 1e-7;
+            const ELEMENTARY_CHARGE = 1.602e-19;
+            const SIMULATION_FORCE_SCALE = 1e11;
+            const BASE_RADIUS_PIXELS = 10;
+            const RADIUS_SCALE_FACTOR = 0.08;
+            const vecSub = (v1, v2) => [v1[0] - v2[0], v1[1] - v2[1]];
+            const vecNorm = (v) => Math.sqrt(v[0] ** 2 + v[1] ** 2);
+            const vecScale = (v, s) => [v[0] * s, v[1] * s];
+            const vecAdd = (v1, v2) => [v1[0] + v2[0], v1[1] + v2[1]];
+
+            function getMagneticFieldAtPoint(point) {
+                let netField = [0, 0];
+                currentWires.forEach(wire => {
+                    const rVec = vecSub(point, wire.pos);
+                    const rMag = vecNorm(rVec);
+                    if (rMag < 0.1) return;
+                    const B_mag = (MU_0 * wire.i) / (2 * Math.PI * rMag);
+                    const B_dir = [-rVec[1] / rMag, rVec[0] / rMag];
+                    netField = vecAdd(netField, vecScale(B_dir, B_mag));
+                });
+                return netField;
+            }
+            const avatarImg = container.querySelector('#avatar-img-magnetic');
+            function speak(text) {
+                if (isMuted || !('speechSynthesis' in window)) return;
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'pt-BR';
+                utterance.rate = 1.1;
+                utterance.onstart = () => avatarImg.classList.add('avatar-speaking');
+                utterance.onend = () => avatarImg.classList.remove('avatar-speaking');
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+            }
+            document.addEventListener('mousemove', (e) => {
+                const pupils = container.querySelectorAll('.pupil');
+                pupils.forEach(pupil => {
+                    const rect = pupil.parentElement.getBoundingClientRect();
+                    const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                    const rad = Math.atan2(e.pageY - y, e.pageX - x);
+                    const rot = (rad * (180 / Math.PI) * -1) + 270;
+                    pupil.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+                });
+            });
+            function updateAvatar(message, shouldSpeak = false) {
+                container.querySelector('#avatar-speech-magnetic').innerHTML = message;
+                if (shouldSpeak) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = message;
+                    speak(tempDiv.textContent || "");
+                }
+            }
+            function updateItemListUI() {
+                const listElement = container.querySelector('#item-list');
+                listElement.innerHTML = '';
+                currentWires.forEach((wire, index) => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span>Fio: ${wire.i.toFixed(0)} A</span><button class="remove-btn" data-index="${index}">X</button>`;
+                    listElement.appendChild(li);
+                });
+                 listElement.querySelectorAll('.remove-btn').forEach(btn => {
+                    btn.onclick = () => removeItem(parseInt(btn.dataset.index));
+                });
+            }
+            const range = { x: [-10, 10], y: [-10, 10] };
+            function resizeCanvas() {
+                const size = Math.min(window.innerWidth * 0.85, window.innerHeight * 0.85);
+                canvas.width = size;
+                canvas.height = size;
+            }
+            function dataToPixel(point) {
+                const x = ((point[0] - range.x[0]) / (range.x[1] - range.x[0])) * canvas.width;
+                const y = (1 - (point[1] - range.y[0]) / (range.y[1] - range.y[0])) * canvas.height;
+                return { x, y };
+            }
+            function pixelToData(pixel) {
+                const x = (pixel.x / canvas.width) * (range.x[1] - range.x[0]) + range.x[0];
+                const y = (1 - (pixel.y / canvas.height)) * (range.y[1] - range.y[0]) + range.y[0];
+                return [x, y];
+            }
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const gridSize = 20;
+                for (let i = 0; i < gridSize; i++) {
+                    for (let j = 0; j < gridSize; j++) {
+                        const x = range.x[0] + (i / (gridSize - 1)) * (range.x[1] - range.x[0]);
+                        const y = range.y[0] + (j / (gridSize - 1)) * (range.y[1] - range.y[0]);
+                        const B = getMagneticFieldAtPoint([x, y]);
+                        const B_mag = vecNorm(B);
+                        if (B_mag === 0) continue;
+                        const B_unit = vecScale(B, 1 / B_mag);
+                        const pStart = dataToPixel([x, y]);
+                        const pEnd = dataToPixel([x + B_unit[0] * 0.5, y + B_unit[1] * 0.5]);
+                        const strength = Math.min(B_mag * 5e5, 1.0);
+                        ctx.strokeStyle = `rgba(0, 255, 150, ${0.1 + strength * 0.6})`;
+                        ctx.lineWidth = 1 + strength;
+                        ctx.beginPath(); ctx.moveTo(pStart.x, pStart.y); ctx.lineTo(pEnd.x, pEnd.y); ctx.stroke();
+                    }
+                }
+                currentWires.forEach(wire => {
+                    const p = dataToPixel(wire.pos);
+                    const radius = BASE_RADIUS_PIXELS + Math.abs(wire.i) * RADIUS_SCALE_FACTOR;
+                    const symbolSize = radius * 1.2;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = (wire === selectedWire) ? 'rgba(255, 255, 0, 0.3)' : 'rgba(255, 255, 255, 0.2)';
+                    ctx.strokeStyle = wire.i > 0 ? '#ff8a80' : '#80d8ff';
+                    ctx.fill(); ctx.stroke();
+                    ctx.font = `bold ${symbolSize}px sans-serif`;
+                    ctx.fillStyle = wire.i > 0 ? '#ff8a80' : '#80d8ff';
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(wire.i > 0 ? '⊙' : '⊗', p.x, p.y);
+                });
+                testParticles.forEach(p => {
+                    if (p.trail.length > 1) {
+                        ctx.beginPath(); const startPoint = dataToPixel(p.trail[0]); ctx.moveTo(startPoint.x, startPoint.y);
+                        ctx.strokeStyle = p.q > 0 ? '#ffeb3b' : '#ff4081'; ctx.lineWidth = 2;
+                        p.trail.forEach(pos => { const point = dataToPixel(pos); ctx.lineTo(point.x, point.y); });
+                        ctx.stroke();
+                    }
+                    const pos = dataToPixel(p.pos);
+                    ctx.beginPath(); ctx.arc(pos.x, pos.y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = p.q > 0 ? '#ffeb3b' : '#ff4081'; ctx.fill();
+                });
+            }
+            function spawnNewParticle() {
+                const edge = Math.floor(Math.random() * 4);
+                let pos, vel;
+                const speed = 2;
+                switch (edge) {
+                    case 0: pos = [Math.random() * 20 - 10, 11]; vel = [0, -speed]; break;
+                    case 1: pos = [11, Math.random() * 20 - 10]; vel = [-speed, 0]; break;
+                    case 2: pos = [Math.random() * 20 - 10, -11]; vel = [0, speed]; break;
+                    case 3: pos = [-11, Math.random() * 20 - 10]; vel = [speed, 0]; break;
+                }
+                const charge = Math.random() > 0.5 ? 1 : -1;
+                const vel_z = 20000 + (Math.random() * 10000 - 5000);
+                testParticles.push({ q: charge * ELEMENTARY_CHARGE, pos: pos, vel: [vel[0], vel[1], vel_z], mass: 9.11e-31, trail: [pos], toRemove: false });
+                if (testParticles.length > 100) testParticles.shift();
+            }
+            function updatePhysics(dt) {
+                particleSpawnCounter++;
+                if (particleSpawnCounter > 20) {
+                    spawnNewParticle();
+                    particleSpawnCounter = 0;
+                }
+                testParticles.forEach(p => {
+                    const B = getMagneticFieldAtPoint(p.pos);
+                    const forceXY = [-p.q * p.vel[2] * B[1], p.q * p.vel[2] * B[0]];
+                    const scaledForce = vecScale(forceXY, SIMULATION_FORCE_SCALE);
+                    const acceleration = vecScale(scaledForce, 1 / p.mass);
+                    p.vel[0] += acceleration[0] * dt; p.vel[1] += acceleration[1] * dt;
+                    p.pos[0] += p.vel[0] * dt; p.pos[1] += p.vel[1] * dt;
+                    p.trail.push([...p.pos]);
+                    if (p.trail.length > 100) p.trail.shift();
+                    if (vecNorm(p.pos) > 15) p.toRemove = true;
+                });
+                if (testParticles.some(p => p.toRemove)) {
+                    testParticles = testParticles.filter(p => !p.toRemove);
+                }
+            }
+            let lastTimestamp = 0;
+            function animationLoop(timestamp) {
+                if (!lastTimestamp) lastTimestamp = timestamp;
+                const dt = (timestamp - lastTimestamp) / 1000;
+                lastTimestamp = timestamp;
+                updatePhysics(Math.min(dt, 0.05));
+                draw();
+                requestAnimationFrame(animationLoop);
+            }
+            function addWireHandler() {
+                const current = parseFloat(container.querySelector('#current-value').value);
+                if (isNaN(current) || current === 0) {
+                    updateAvatar("<h4>Valor inválido!</h4><p>Por favor, insira um valor de corrente diferente de zero.</p>", true);
+                    return;
+                }
+                currentWires.push({ i: current, pos: [0, 0] });
+                updateItemListUI();
+                updateAvatar(`<h4>Fio Adicionado!</h4><p>Um fio com ${current.toFixed(0)} A foi colocado na origem.</p>`, true);
+            }
+            function removeItem(index) {
+                currentWires.splice(index, 1);
+                updateItemListUI();
+                updateAvatar("<h4>Fio Removido!</h4><p>O campo magnético foi atualizado.</p>", true);
+            }
+            function init() {
+                container.querySelector('#add-wire-btn').addEventListener('click', addWireHandler);
+                container.querySelector('#reset-btn').addEventListener('click', () => {
+                    testParticles.length = 0;
+                    particleSpawnCounter = 0;
+                    updateAvatar("<h4>Partículas Limpas!</h4><p>Todo o rastro de partículas foi removido.</p>", true);
+                });
+                container.querySelector('#sound-toggle-magnetic').addEventListener('click', () => {
+                    isMuted = !isMuted;
+                    container.querySelector('#sound-toggle-magnetic').innerText = isMuted ? '🔇' : '🔊';
+                    speak(isMuted ? "Áudio desativado." : "Áudio ativado.");
+                });
+                currentWires.push({ i: 100, pos: [-5, 0] });
+                currentWires.push({ i: -100, pos: [5, 0] });
+                updateItemListUI();
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+                updateAvatar("<h3>Bem-vindo!</h3><p>Adicione fios de corrente, arraste-os e veja como as partículas se comportam no campo magnético!</p>", true);
+                animationLoop();
+            }
+            canvas.addEventListener('mousedown', (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+                for (const wire of [...currentWires].reverse()) {
+                    const wirePixelPos = dataToPixel(wire.pos);
+                    const radius = BASE_RADIUS_PIXELS + Math.abs(wire.i) * RADIUS_SCALE_FACTOR;
+                    const distance = Math.sqrt((mouseX - wirePixelPos.x) ** 2 + (mouseY - wirePixelPos.y) ** 2);
+                    if (distance < radius) {
+                        selectedWire = wire;
+                        const mouseDataPos = pixelToData({ x: mouseX, y: mouseY });
+                        offsetX = mouseDataPos[0] - wire.pos[0];
+                        offsetY = mouseDataPos[1] - wire.pos[1];
+                        break;
+                    }
+                }
+            });
+            canvas.addEventListener('mousemove', (event) => {
+                if (selectedWire) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mouseX = event.clientX - rect.left;
+                    const mouseY = event.clientY - rect.top;
+                    const mouseDataPos = pixelToData({ x: mouseX, y: mouseY });
+                    selectedWire.pos[0] = mouseDataPos[0] - offsetX;
+                    selectedWire.pos[1] = mouseDataPos[1] - offsetY;
+                }
+            });
+            canvas.addEventListener('mouseup', () => { selectedWire = null; });
+            init();
+        }
+
+        // --- CÓDIGO DO SIMULADOR DE CAMPO ELÉTRICO ESTÁTICO (ENCAPSULADO) ---
+        function initStaticElectricSim() {
+            const container = document.getElementById('static-electric-container');
+            const k = 8.9875517923e9;
+            function linspace(start, stop, num) {
+                const arr = [];
+                const step = (stop - start) / (num - 1);
+                for (let i = 0; i < num; i++) {
+                    arr.push(start + (step * i));
+                }
+                return arr;
+            }
+            function meshgrid(x_range, y_range) {
+                const x_grid = [], y_grid = [];
+                for (let i = 0; i < y_range.length; i++) {
+                    const x_row = [], y_row = [];
+                    for (let j = 0; j < x_range.length; j++) {
+                        x_row.push(x_range[j]);
+                        y_row.push(y_range[i]);
+                    }
+                    x_grid.push(x_row);
+                    y_grid.push(y_row);
+                }
+                return [x_grid, y_grid];
+            }
+            function calculatePotential(cargas, x_grid, y_grid) {
+                const rows = y_grid.length, cols = x_grid[0].length;
+                const V = Array(rows).fill(0).map(() => Array(cols).fill(0));
+                let vMin = Infinity, vMax = -Infinity;
+                for (const [q, pos] of cargas) {
+                    if (q === 0) continue;
+                    for (let i = 0; i < rows; i++) {
+                        for (let j = 0; j < cols; j++) {
+                            const dx = x_grid[i][j] - pos[0], dy = y_grid[i][j] - pos[1];
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist === 0) {
+                                V[i][j] = q > 0 ? Infinity : -Infinity;
+                            } else {
+                                V[i][j] += (k * q) / dist;
+                            }
+                        }
+                    }
+                }
+                let vAbsMax = 0;
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                        const val = V[i][j];
+                        if (isFinite(val)) {
+                            if (val < vMin) vMin = val;
+                            if (val > vMax) vMax = val;
+                            if (Math.abs(val) > vAbsMax) vAbsMax = Math.abs(val);
+                        }
+                    }
+                }
+                if (vAbsMax === 0) vAbsMax = 1;
+                return { potentialGrid: V, vMin, vMax, vAbsMax };
+            }
+            function calculateElectricField(cargas, x_grid, y_grid) {
+                const rows = y_grid.length, cols = x_grid[0].length;
+                const Ex = Array(rows).fill(0).map(() => Array(cols).fill(0));
+                const Ey = Array(rows).fill(0).map(() => Array(cols).fill(0));
+                for (const [q, pos] of cargas) {
+                    if (q === 0) continue;
+                    for (let i = 0; i < rows; i++) {
+                        for (let j = 0; j < cols; j++) {
+                            const dx = x_grid[i][j] - pos[0], dy = y_grid[i][j] - pos[1];
+                            const dist_sq = dx * dx + dy * dy;
+                            if (dist_sq === 0) continue;
+                            const r = Math.sqrt(dist_sq);
+                            const magnitude = (k * q) / dist_sq;
+                            Ex[i][j] += magnitude * dx / r;
+                            Ey[i][j] += magnitude * dy / r;
+                        }
+                    }
+                }
+                return [Ex, Ey];
+            }
+            const canvas = container.querySelector('#simCanvas-static');
+            const ctx = canvas.getContext('2d');
+            const canvasSize = canvas.width;
+            const worldMin = -2.1, worldMax = 2.1;
+            const worldSize = worldMax - worldMin;
+            let appState = {
+                cargas: [
+                    { id: 1, valInput: 'q1_val', xInput: 'q1_x', yInput: 'q1_y', q: 0, pos: [0, 0], canvasRadius: 8 },
+                    { id: 2, valInput: 'q2_val', xInput: 'q2_x', yInput: 'q2_y', q: 0, pos: [0, 0], canvasRadius: 8 }
+                ],
+                draggingCharge: null,
+                baseCharge: 1e-9,
+                baseRadius: 8
+            };
+            let isMuted = true;
+            const defaultAvatarMessage = `<h3>Bem-vindo ao Simulador!</h3><p>Configure os valores, clique e arraste as cargas para ver o campo se ajustar!</p>`;
+            function worldToCanvas(x, y) {
+                const scale = canvasSize / worldSize;
+                const canvasX = (x - worldMin) * scale;
+                const canvasY = canvasSize - (y - worldMin) * scale;
+                return [canvasX, canvasY];
+            }
+            function canvasToWorld(canvasX, canvasY) {
+                const scale = canvasSize / worldSize;
+                const worldX = (canvasX / scale) + worldMin;
+                const worldY = ((canvasSize - canvasY) / scale) + worldMin;
+                return [worldX, worldY];
+            }
+            const avatarImg = container.querySelector('#avatar-img-static');
+            function speak(text) {
+                if (isMuted || !('speechSynthesis' in window)) return;
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'pt-BR';
+                utterance.rate = 1.1;
+                utterance.onstart = () => avatarImg.classList.add('avatar-speaking');
+                utterance.onend = () => avatarImg.classList.remove('avatar-speaking');
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+            }
+            document.addEventListener('mousemove', (e) => {
+                 const pupils = container.querySelectorAll('.pupil');
+                 pupils.forEach(pupil => {
+                     const rect = pupil.parentElement.getBoundingClientRect();
+                     const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                     const rad = Math.atan2(e.pageY - y, e.pageX - x);
+                     const rot = (rad * (180 / Math.PI) * -1) + 270;
+                     pupil.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+                 });
+            });
+            function updateAvatar(message, shouldSpeak = false) {
+                container.querySelector('#avatar-speech-static').innerHTML = message;
+                if (shouldSpeak) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = message;
+                    speak(tempDiv.textContent || "");
+                }
+            }
+            function drawSimulation() {
+                ctx.clearRect(0, 0, canvasSize, canvasSize);
+                const cargasData = appState.cargas.map(c => [c.q, c.pos]);
+                const hasCharges = cargasData.some(c => c[0] !== 0);
+                if (!hasCharges) {
+                    ctx.fillStyle = "#f0f0f0";
+                    ctx.fillRect(0, 0, canvasSize, canvasSize);
+                    return;
+                }
+                const fieldResolution = 25, vectorWorldLength = 0.15, minDrawDist = 0.25;
+                const x_range_field = linspace(worldMin, worldMax, fieldResolution);
+                const y_range_field = linspace(worldMin, worldMax, fieldResolution);
+                const [x_grid_field, y_grid_field] = meshgrid(x_range_field, y_range_field);
+                const [Ex, Ey] = calculateElectricField(cargasData, x_grid_field, y_grid_field);
+                ctx.strokeStyle = '#000000'; ctx.lineWidth = 1;
+                for (let i = 0; i < fieldResolution; i++) {
+                    for (let j = 0; j < fieldResolution; j++) {
+                        const x = x_grid_field[i][j], y = y_grid_field[i][j];
+                        let isTooClose = false;
+                        for (const [q, pos] of cargasData) {
+                            if (q === 0) continue;
+                            const dist = Math.sqrt((x - pos[0]) ** 2 + (y - pos[1]) ** 2);
+                            if (dist < minDrawDist) { isTooClose = true; break; }
+                        }
+                        if (isTooClose) continue;
+                        const ex = Ex[i][j], ey = Ey[i][j];
+                        const mag = Math.sqrt(ex * ex + ey * ey);
+                        if (mag === 0) continue;
+                        const dx = (ex / mag) * vectorWorldLength, dy = (ey / mag) * vectorWorldLength;
+                        const [startX, startY] = worldToCanvas(x, y), [endX, endY] = worldToCanvas(x + dx, y + dy);
+                        ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(endX, endY); ctx.stroke();
+                        const angle = Math.atan2(endY - startY, endX - startX);
+                        ctx.beginPath(); ctx.moveTo(endX, endY);
+                        ctx.lineTo(endX - 6 * Math.cos(angle - Math.PI / 6), endY - 6 * Math.sin(angle - Math.PI / 6));
+                        ctx.lineTo(endX - 6 * Math.cos(angle + Math.PI / 6), endY - 6 * Math.sin(angle + Math.PI / 6));
+                        ctx.closePath(); ctx.fillStyle = '#000000'; ctx.fill();
+                    }
+                }
+                const contourResolution = 100;
+                const x_range_pot = linspace(worldMin, worldMax, contourResolution);
+                const y_range_pot = linspace(worldMin, worldMax, contourResolution);
+                const [x_grid_pot, y_grid_pot] = meshgrid(x_range_pot, y_range_pot);
+                const { potentialGrid, vMin, vMax } = calculatePotential(cargasData, x_grid_pot, y_grid_pot);
+                const values1D = potentialGrid.flat();
+                let levels = [];
+                if (vMax > 1e-9) {
+                    const posStart = Math.log10(Math.max(vMax * 0.01, 1e-9)), posEnd = Math.log10(vMax * 0.9);
+                    if (posStart < posEnd) { levels = levels.concat(d3.range(posStart, posEnd, 0.3).map(l => Math.pow(10, l))); }
+                }
+                if (vMin < -1e-9) {
+                    const negStart = Math.log10(Math.max(Math.abs(vMin * 0.01), 1e-9)), negEnd = Math.log10(Math.abs(vMin * 0.9));
+                    if (negStart < negEnd) { levels = levels.concat(d3.range(negStart, negEnd, 0.3).map(l => -Math.pow(10, l))); }
+                }
+                levels.push(0.0);
+                levels = levels.filter(l => isFinite(l)).sort((a, b) => a - b);
+                const contours = d3.contours().size([contourResolution, contourResolution]).thresholds(levels)(values1D);
+                ctx.strokeStyle = '#666'; ctx.lineWidth = 1.2;
+                const worldStep = worldSize / (contourResolution - 1);
+                for (const contour of contours) {
+                    for (const ring of contour.coordinates) {
+                        ctx.beginPath();
+                        const [startJ, startI] = ring[0];
+                        const [startX, startY] = worldToCanvas(worldMin + startJ * worldStep, worldMin + startI * worldStep);
+                        ctx.moveTo(startX, startY);
+                        for (let k = 1; k < ring.length; k++) {
+                            const [j, i] = ring[k];
+                            const [canvasX, canvasY] = worldToCanvas(worldMin + j * worldStep, worldMin + i * worldStep);
+                            ctx.lineTo(canvasX, canvasY);
+                        }
+                        ctx.stroke();
+                    }
+                }
+                const baseRadius = appState.baseRadius, baseCharge = appState.baseCharge;
+                for (const charge of appState.cargas) {
+                    const { q, pos } = charge;
+                    if (q === 0) continue;
+                    const [cx, cy] = worldToCanvas(pos[0], pos[1]);
+                    const radius = baseRadius * Math.sqrt(Math.abs(q) / baseCharge);
+                    const clampedRadius = Math.max(5, Math.min(25, radius));
+                    charge.canvasRadius = clampedRadius;
+                    ctx.beginPath(); ctx.arc(cx, cy, clampedRadius, 0, 2 * Math.PI);
+                    ctx.fillStyle = q > 0 ? '#ff0000' : '#0000ff';
+                    ctx.fill();
+                    ctx.strokeStyle = '#000000'; ctx.lineWidth = 2; ctx.stroke();
+                }
+            }
+            function updateStateFromForm() {
+                for (const charge of appState.cargas) {
+                    charge.q = parseFloat(container.querySelector('#' + charge.valInput).value) || 0;
+                    charge.pos[0] = parseFloat(container.querySelector('#' + charge.xInput).value) || 0;
+                    charge.pos[1] = parseFloat(container.querySelector('#' + charge.yInput).value) || 0;
+                }
+            }
+            function updateFormFromState(charge) {
+                container.querySelector('#' + charge.xInput).value = charge.pos[0].toFixed(2);
+                container.querySelector('#' + charge.yInput).value = charge.pos[1].toFixed(2);
+            }
+            function getMousePos(event) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+                return { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY };
+            }
+            canvas.addEventListener('mousedown', (event) => {
+                const mousePos = getMousePos(event);
+                let clickedCharge = null;
+                for (const charge of [...appState.cargas].reverse()) {
+                    if (charge.q === 0) continue;
+                    const [chargeCanvasX, chargeCanvasY] = worldToCanvas(charge.pos[0], charge.pos[1]);
+                    const dist = Math.sqrt((mousePos.x - chargeCanvasX) ** 2 + (mousePos.y - chargeCanvasY) ** 2);
+                    if (dist < charge.canvasRadius) { clickedCharge = charge; break; }
+                }
+                if (clickedCharge) {
+                    appState.draggingCharge = clickedCharge;
+                    canvas.style.cursor = 'grabbing';
+                    updateAvatar("<h4>Ajustando posição...</h4><p>Solte o mouse para fixar a carga.</p>", true);
+                    event.preventDefault();
+                }
+            });
+            canvas.addEventListener('mousemove', (event) => {
+                if (appState.draggingCharge) {
+                    const mousePos = getMousePos(event);
+                    const [worldX, worldY] = canvasToWorld(mousePos.x, mousePos.y);
+                    appState.draggingCharge.pos[0] = worldX;
+                    appState.draggingCharge.pos[1] = worldY;
+                    updateFormFromState(appState.draggingCharge);
+                    drawSimulation();
+                } else {
+                    const mousePos = getMousePos(event);
+                    let hovering = false;
+                    for (const charge of appState.cargas) {
+                        if (charge.q === 0) continue;
+                        const [chargeCanvasX, chargeCanvasY] = worldToCanvas(charge.pos[0], charge.pos[1]);
+                        const dist = Math.sqrt((mousePos.x - chargeCanvasX) ** 2 + (mousePos.y - chargeCanvasY) ** 2);
+                        if (dist < charge.canvasRadius) { hovering = true; break; }
+                    }
+                    canvas.style.cursor = hovering ? 'grab' : 'default';
+                }
+            });
+            const stopDragging = () => {
+                 if (appState.draggingCharge) {
+                    appState.draggingCharge = null;
+                    updateAvatar("<h4>Posição atualizada!</h4><p>Recalculando o campo...</p>", true);
+                }
+                canvas.style.cursor = 'default';
+            };
+            canvas.addEventListener('mouseup', stopDragging);
+            canvas.addEventListener('mouseout', stopDragging);
+            
+            updateStateFromForm();
+            drawSimulation();
+            container.querySelector('#sound-toggle-static').addEventListener('click', () => {
+                isMuted = !isMuted;
+                container.querySelector('#sound-toggle-static').innerText = isMuted ? '🔇' : '🔊';
+                speak(isMuted ? "Áudio desativado." : "Áudio ativado.");
+            });
+            updateAvatar(defaultAvatarMessage, true);
+            container.querySelector('#simForm').addEventListener('input', () => {
+                updateStateFromForm();
+                drawSimulation();
+                updateAvatar("<h4>Valores atualizados!</h4><p>Recalculando o campo...</p>");
+            });
+        }
+        
+        // --- CÓDIGO DO SIMULADOR DE CAMPO ELÉTRICO DINÂMICO (ENCAPSULADO) ---
+        function initDynamicElectricSim() {
+            const container = document.getElementById('dynamic-electric-container');
+            const canvas = container.querySelector('#simulation-canvas-dynamic');
+            const ctx = canvas.getContext('2d');
+            let charges = [], selectedCharge = null, offsetX = 0, offsetY = 0;
+            let isSimulationRunning = false, lastTimestamp = 0, initialChargesState = [];
+            let isMuted = true;
+            const FORCE_CONSTANT = 5e18;
+            const k_real = 8.98755e9;
+            const defaultAvatarMessage = `<h3>Bem-vindo ao Simulador!</h3><p>Adicione cargas, clique em <b>Iniciar Simulação</b> e veja a mágica acontecer! Você também pode arrastá-las.</p>`;
+            const vecSub = (v1, v2) => [v1[0] - v2[0], v1[1] - v2[1]];
+            const vecNorm = (v) => Math.sqrt(v[0] ** 2 + v[1] ** 2);
+            const vecScale = (v, s) => [v[0] * s, v[1] * s];
+            const vecAdd = (v1, v2) => [v1[0] + v2[0], v1[1] + v2[1]];
+            function getElectricFieldAtPoint(point) {
+                let netField = [0, 0];
+                charges.forEach(charge => {
+                    const rVec = vecSub(point, charge.pos), rMag = vecNorm(rVec);
+                    if (rMag < 0.01) return;
+                    const rUnitVec = vecScale(rVec, 1 / rMag);
+                    const fieldMag = (k_real * charge.q) / (rMag ** 2);
+                    netField = vecAdd(netField, vecScale(rUnitVec, fieldMag));
+                });
+                return netField;
+            }
+            function integrateFieldLine(startPoint) {
+                let path = [startPoint], currentPoint = [...startPoint];
+                const stepSize = 0.08, maxSteps = 250;
+                for (let i = 0; i < maxSteps; i++) {
+                    const field = getElectricFieldAtPoint(currentPoint), fieldMag = vecNorm(field);
+                    if (fieldMag === 0) break;
+                    const direction = vecScale(field, 1 / fieldMag);
+                    const nextPoint = vecAdd(currentPoint, vecScale(direction, stepSize));
+                    path.push(nextPoint);
+                    currentPoint = nextPoint;
+                    if (vecNorm(currentPoint) > 15) break;
+                    for (const charge of charges) {
+                        if (charge.q < 0 && vecNorm(vecSub(currentPoint, charge.pos)) < 0.25) return path;
+                    }
+                }
+                return path;
+            }
+            const avatarImg = container.querySelector('#avatar-img-dynamic');
+            function speak(text) {
+                if (isMuted || !('speechSynthesis' in window)) return;
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'pt-BR';
+                utterance.rate = 1.1;
+                utterance.onstart = () => avatarImg.classList.add('avatar-speaking');
+                utterance.onend = () => avatarImg.classList.remove('avatar-speaking');
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+            }
+            document.addEventListener('mousemove', (e) => {
+                 const pupils = container.querySelectorAll('.pupil');
+                 pupils.forEach(pupil => {
+                     const rect = pupil.parentElement.getBoundingClientRect();
+                     const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                     const rad = Math.atan2(e.pageY - y, e.pageX - x);
+                     const rot = (rad * (180 / Math.PI) * -1) + 270;
+                     pupil.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+                 });
+            });
+            function updateChargeListUI() {
+                const listElement = container.querySelector('#charge-list');
+                listElement.innerHTML = '';
+                charges.forEach((charge, index) => {
+                    const li = document.createElement('li');
+                    const chargeValue = (charge.q / 1e-9).toFixed(1);
+                    li.innerHTML = `<span>Carga: ${chargeValue} nC</span><button class="remove-btn" data-index="${index}">X</button>`;
+                    listElement.appendChild(li);
+                });
+                listElement.querySelectorAll('.remove-btn').forEach(btn => {
+                    btn.onclick = () => removeCharge(parseInt(btn.dataset.index));
+                });
+            }
+            function updateAvatar(message, shouldSpeak = false) {
+                container.querySelector('#avatar-speech-dynamic').innerHTML = message;
+                if (shouldSpeak) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = message;
+                    speak(tempDiv.textContent || "");
+                }
+            }
+            const range = { x: [-10, 10], y: [-10, 10] };
+            const BASE_RADIUS = 8, SCALE_FACTOR = 2;
+            function calculateRadius(charge) {
+                return BASE_RADIUS + (Math.abs(charge.q / 1e-9) * SCALE_FACTOR);
+            }
+            function resizeCanvas() {
+                const size = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.85);
+                canvas.width = size; canvas.height = size;
+                draw();
+            }
+            function dataToPixel(point) {
+                const x = ((point[0] - range.x[0]) / (range.x[1] - range.x[0])) * canvas.width;
+                const y = (1 - (point[1] - range.y[0]) / (range.y[1] - range.y[0])) * canvas.height;
+                return { x, y };
+            }
+            function pixelToData(pixel) {
+                const x = (pixel.x / canvas.width) * (range.x[1] - range.x[0]) + range.x[0];
+                const y = (1 - (pixel.y / canvas.height)) * (range.y[1] - range.y[0]) + range.y[0];
+                return [x, y];
+            }
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const origin = dataToPixel([0, 0]);
+                ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, origin.y); ctx.lineTo(canvas.width, origin.y);
+                ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, canvas.height);
+                ctx.stroke();
+                const positiveChargesForLines = charges.filter(c => c.q > 0);
+                positiveChargesForLines.forEach(pCharge => {
+                    const numLines = Math.min(Math.floor(Math.abs(pCharge.q / 1e-9) * 8), 64);
+                    for (let i = 0; i < numLines; i++) {
+                        const angle = (i / numLines) * 2 * Math.PI;
+                        const r = 0.25;
+                        const startX = pCharge.pos[0] + r * Math.cos(angle);
+                        const startY = pCharge.pos[1] + r * Math.sin(angle);
+                        const path = integrateFieldLine([startX, startY]);
+                        ctx.strokeStyle = 'purple'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.6;
+                        ctx.beginPath();
+                        path.forEach((point, index) => {
+                            const p = dataToPixel(point);
+                            if (index === 0) ctx.moveTo(p.x, p.y);
+                            else ctx.lineTo(p.x, p.y);
+                        });
+                        ctx.stroke();
+                        ctx.globalAlpha = 1.0;
+                    }
+                });
+                charges.forEach(charge => {
+                    const p = dataToPixel(charge.pos);
+                    const radius = calculateRadius(charge);
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = charge.q > 0 ? '#ff3d3d' : '#0d6efd';
+                    ctx.fill();
+                });
+            }
+            function updatePhysics(dt) {
+                const damping = 0.98, minDistance = 0.5;
+                charges.forEach(charge1 => {
+                    let netForce = [0, 0];
+                    charges.forEach(charge2 => {
+                        if (charge1 === charge2) return;
+                        const rVec = vecSub(charge1.pos, charge2.pos);
+                        let rMag = vecNorm(rVec);
+                        if (rMag < minDistance) rMag = minDistance;
+                        const rUnitVec = vecScale(rVec, 1 / rMag);
+                        const forceMag = (FORCE_CONSTANT * charge1.q * charge2.q) / (rMag * rMag);
+                        const forceVec = vecScale(rUnitVec, forceMag);
+                        netForce = vecAdd(netForce, forceVec);
+                    });
+                    charge1.force = netForce;
+                });
+                charges.forEach(charge => {
+                    if (charge === selectedCharge) return;
+                    const acceleration = vecScale(charge.force, 1 / charge.mass);
+                    charge.vel = vecAdd(charge.vel, vecScale(acceleration, dt));
+                    charge.vel = vecScale(charge.vel, damping);
+                    charge.pos = vecAdd(charge.pos, vecScale(charge.vel, dt));
+                });
+            }
+            function animationLoop(timestamp) {
+                if (!lastTimestamp) lastTimestamp = timestamp;
+                const dt = (timestamp - lastTimestamp) / 1000;
+                lastTimestamp = timestamp;
+                if (isSimulationRunning) {
+                    updatePhysics(Math.min(dt, 0.05));
+                }
+                draw();
+                requestAnimationFrame(animationLoop);
+            }
+            function addChargeHandler() {
+                const q_val_nC = parseFloat(container.querySelector('#charge-value').value);
+                if (isNaN(q_val_nC) || q_val_nC === 0) {
+                    updateAvatar(`<h4>Valor Inválido!</h4><p>Por favor, insira um valor de carga diferente de zero.</p>`, true);
+                    return;
+                }
+                const newCharge = { q: q_val_nC * 1e-9, pos: [Math.random() * 4 - 2, Math.random() * 4 - 2], vel: [0, 0], mass: 1.0 };
+                charges.push(newCharge);
+                initialChargesState.push(JSON.parse(JSON.stringify(newCharge)));
+                updateChargeListUI();
+                updateAvatar(`<h4>Carga de ${q_val_nC} nC Adicionada!</h4><p>Clique em 'Iniciar Simulação' para vê-la interagir.</p>`, true);
+            }
+            function removeCharge(index) {
+                charges.splice(index, 1);
+                initialChargesState.splice(index, 1);
+                updateChargeListUI();
+                updateAvatar(`<h4>Carga Removida!</h4><p>A simulação foi atualizada.</p>`, true);
+            }
+            function init() {
+                container.querySelector('#add-charge-btn').addEventListener('click', addChargeHandler);
+                container.querySelector('#sound-toggle-dynamic').addEventListener('click', () => {
+                    isMuted = !isMuted;
+                    container.querySelector('#sound-toggle-dynamic').innerText = isMuted ? '🔇' : '🔊';
+                    speak(isMuted ? "Áudio desativado." : "Áudio ativado.");
+                });
+                const toggleBtn = container.querySelector('#toggle-simulation-btn');
+                toggleBtn.addEventListener('click', () => {
+                    isSimulationRunning = !isSimulationRunning;
+                    if (isSimulationRunning) {
+                        lastTimestamp = 0;
+                        toggleBtn.innerHTML = '⏸️ Pausar Simulação';
+                        toggleBtn.style.backgroundColor = '#ffc107';
+                        updateAvatar("<h4>Simulação iniciada!</h4><p>As cargas agora se movem de acordo com suas forças.</p>", true);
+                    } else {
+                        toggleBtn.innerHTML = '▶️ Iniciar Simulação';
+                        toggleBtn.style.backgroundColor = '#0d6efd';
+                        updateAvatar("<h4>Simulação pausada.</h4><p>Você pode ajustar as posições ou adicionar mais cargas.</p>", true);
+                    }
+                });
+                container.querySelector('#reset-btn-dynamic').addEventListener('click', () => {
+                    charges.forEach((charge, index) => {
+                        charge.pos = [...initialChargesState[index].pos];
+                        charge.vel = [0, 0];
+                    });
+                    updateAvatar("<h4>Posições resetadas!</h4><p>As cargas voltaram às suas posições originais.</p>", true);
+                });
+                charges.push({ q: 2e-9, pos: [-4, 2], vel: [0, 0], mass: 1.0 });
+                charges.push({ q: -4e-9, pos: [4, -2], vel: [0, 0], mass: 1.0 });
+                initialChargesState = JSON.parse(JSON.stringify(charges));
+                updateChargeListUI();
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+                updateAvatar(defaultAvatarMessage, true);
+                requestAnimationFrame(animationLoop);
+            }
+            canvas.addEventListener('mousedown', (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left, mouseY = event.clientY - rect.top;
+                for (const charge of [...charges].reverse()) {
+                    const chargePixelPos = dataToPixel(charge.pos);
+                    const radius = calculateRadius(charge);
+                    const distance = Math.sqrt((mouseX - chargePixelPos.x) ** 2 + (mouseY - chargePixelPos.y) ** 2);
+                    if (distance < radius) {
+                        selectedCharge = charge;
+                        selectedCharge.vel = [0, 0];
+                        const mouseDataPos = pixelToData({ x: mouseX, y: mouseY });
+                        offsetX = mouseDataPos[0] - charge.pos[0];
+                        offsetY = mouseDataPos[1] - charge.pos[1];
+                        break;
+                    }
+                }
+            });
+            canvas.addEventListener('mousemove', (event) => {
+                if (selectedCharge) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mouseX = event.clientX - rect.left, mouseY = event.clientY - rect.top;
+                    const mouseDataPos = pixelToData({ x: mouseX, y: mouseY });
+                    selectedCharge.pos[0] = mouseDataPos[0] - offsetX;
+                    selectedCharge.pos[1] = mouseDataPos[1] - offsetY;
+                    selectedCharge.vel = [0, 0];
+                }
+            });
+            canvas.addEventListener('mouseup', () => {
+                if (selectedCharge) {
+                    selectedCharge.vel = [0, 0];
+                    selectedCharge = null;
+                    updateAvatar("<h4>Posição Atualizada!</h4><p>A simulação continua com a nova posição da carga.</p>", true);
+                }
+            });
+            init();
+        }
+
+        // --- INICIALIZAÇÃO DA PÁGINA ---
+        window.onload = function() {
+            // Mostra a primeira aba por padrão
+            showTab('magnetic');
+        };
+    </script>
+
+</body>
+</html>

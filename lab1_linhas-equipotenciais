@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Campo Elétrico</title>
+    <!-- Carrega o Tailwind CSS para estilização -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Adicionar bibliotecas D3 para contorno -->
+    <script src="https://d3js.org/d3-array.v3.min.js"></script>
+    <script src="https://d3js.org/d3-contour.v4.min.js"></script>
+    <style>
+        /* Fonte padrão Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Garante que o canvas seja nítido em telas de alta densidade */
+        canvas {
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 0.5rem;
+            touch-action: none; /* Desabilita scroll no canvas em touch */
+        }
+        /* Melhora a aparência dos inputs numéricos */
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* --- CSS do Avatar (Adicionado) --- */
+        .avatar-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 100;
+            display: flex; align-items: flex-end;
+        }
+        #avatar-wrapper {
+            position: relative; width: 150px; height: 185px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+            animation: float 4s ease-in-out infinite;
+        }
+        .avatar-head { position: absolute; top: 0; left: 0; width: 150px; height: 150px; z-index: 10; }
+        .avatar-img {
+            width: 100%; height: 100%; border-radius: 50%; border: 4px solid #fff;
+            box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); transition: box-shadow 0.3s ease-in-out;
+        }
+        .avatar-speaking { animation: pulse-glow 1.5s infinite; }
+        .avatar-neck {
+            position: absolute; top: 135px; left: 50%; transform: translateX(-50%);
+            width: 30px; height: 15px; background-color: #495057; z-index: 6;
+        }
+        .avatar-body {
+            position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 120px; height: 50px; background-color: #0d6efd;
+            border-radius: 60px 60px 20px 20px; box-shadow: inset 0 -10px 20px rgba(0,0,0,0.2); z-index: 5;
+        }
+        .eye { position: absolute; background: white; border-radius: 50%; width: 30px; height: 38px; }
+        .left-eye { top: 55px; left: 35px; }
+        .right-eye { top: 55px; left: 85px; }
+        .pupil {
+            position: absolute; background: #222; width: 16px; height: 16px; border-radius: 50%;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+        }
+        .speech-bubble {
+            background: #fff; border: 2px solid #0d6efd; border-radius: 15px; padding: 20px;
+            max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 16px; margin-right: 20px;
+        }
+        .speech-bubble h3 { margin-top: 0; color: #0b5ed7; }
+        #sound-toggle {
+            position: absolute; top: 10px; right: 10px; z-index: 15; width: 30px; height: 30px;
+            background: #fff; border-radius: 50%; border: 1px solid #ccc; cursor: pointer; font-size: 16px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes pulse-glow { 0% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(13, 110, 253, 1), 0 0 40px rgba(13, 110, 253, 0.8); }
+            100% { box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); } }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <h1 class="text-3xl font-bold text-center text-blue-700 mb-6">
+            Simulador de Campo Elétrico e Potencial
+        </h1>
+        <p class="text-center text-gray-600 mb-8 max-w-2xl mx-auto">
+            Configure os valores e posições de duas cargas pontuais. O gráfico mostrará as
+            <span class="font-semibold text-gray-700">linhas equipotenciais</span>
+            (cinza) e os vetores do campo elétrico (setas pretas).
+            <span class="block text-sm mt-2">Você pode clicar e arrastar as cargas no visualizador.</span>
+        </p>
+
+        <!-- Layout principal: Controles ao lado do Canvas em telas grandes -->
+        <div class="flex flex-col lg:flex-row gap-8">
+
+            <!-- Painel de Controles -->
+            <div class="w-full lg:w-1/3 xl:w-1/4">
+                <form id="simForm" class="bg-white p-6 rounded-lg shadow-lg space-y-6">
+                    <!-- Carga 1 -->
+                    <fieldset class="border border-gray-300 p-4 rounded-md">
+                        <legend class="text-lg font-semibold text-blue-600 px-2">Carga 1</legend>
+                        <div class="space-y-3">
+                            <div>
+                                <label for="q1_val" class="block text-sm font-medium text-gray-700">Valor (C)</label>
+                                <input type="number" id="q1_val" value="1e-9" step="any" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                            </div>
+                            <div>
+                                <label for="q1_x" class="block text-sm font-medium text-gray-700">Posição X (m)</label>
+                                <input type="number" id="q1_x" value="-0.5" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                            </div>
+                            <div>
+                                <label for="q1_y" class="block text-sm font-medium text-gray-700">Posição Y (m)</label>
+                                <input type="number" id="q1_y" value="0.0" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <!-- Carga 2 -->
+                    <fieldset class="border border-gray-300 p-4 rounded-md">
+                        <legend class="text-lg font-semibold text-red-600 px-2">Carga 2</legend>
+                        <div class="space-y-3">
+                            <div>
+                                <label for="q2_val" class="block text-sm font-medium text-gray-700">Valor (C)</label>
+                                <input type="number" id="q2_val" value="-1e-9" step="any" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                            </div>
+                            <div>
+                                <label for="q2_x" class="block text-sm font-medium text-gray-700">Posição X (m)</label>
+                                <input type="number" id="q2_x" value="0.5" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                            </div>
+                            <div>
+                                <label for="q2_y" class="block text-sm font-medium text-gray-700">Posição Y (m)</label>
+                                <input type="number" id="q2_y" value="0.0" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                            </div>
+                        </div>
+                    </fieldset>
+                    
+                    <p class="text-xs text-gray-500 text-center">
+                        Os valores são atualizados automaticamente.
+                    </p>
+                </form>
+            </div>
+
+            <!-- Painel de Simulação (Canvas) -->
+            <div class="w-full lg:w-2/3 xl:w-3/4 flex justify-center items-start">
+                <canvas id="simCanvas" width="600" height="600"></canvas>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- HTML do Avatar (Adicionado) -->
+    <div class="avatar-container">
+        <div class="speech-bubble" id="avatar-speech">
+            <h3>Olá! Bem-vindo ao Simulador!</h3>
+            <p>Configure os valores, clique e arraste as cargas para ver o campo se ajustar!</p>
+        </div>
+        <div id="avatar-wrapper">
+            <div class="avatar-body"></div>
+            <div class="avatar-neck"></div>
+            <div class="avatar-head">
+                <!-- Imagem Base64 do Avatar (Copiada) -->
+                <img src="data:image/jpeg;base64,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" class="avatar-img" id="avatar-img">
+                <div class="eye left-eye"><div class="pupil"></div></div>
+                <div class="eye right-eye"><div class="pupil"></div></div>
+                <button id="sound-toggle">🔇</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Lógica de Simulação (Portado de Python para JS) ---
+
+        // Constante de Coulomb
+        const k = 8.9875517923e9;
+
+        // Equivalente JS para np.linspace
+        function linspace(start, stop, num) {
+            const arr = [];
+            const step = (stop - start) / (num - 1);
+            for (let i = 0; i < num; i++) {
+                arr.push(start + (step * i));
+            }
+            return arr;
+        }
+
+        // Equivalente JS para np.meshgrid
+        function meshgrid(x_range, y_range) {
+            const x_grid = [];
+            const y_grid = [];
+            for (let i = 0; i < y_range.length; i++) {
+                const x_row = [];
+                const y_row = [];
+                for (let j = 0; j < x_range.length; j++) {
+                    x_row.push(x_range[j]);
+                    y_row.push(y_range[i]);
+                }
+                x_grid.push(x_row);
+                y_grid.push(y_row);
+            }
+            return [x_grid, y_grid];
+        }
+
+        /**
+         * Calcula o potencial elétrico (V) em uma grade de pontos.
+         * (Portado de 'calcular_potencial_eletrico')
+         */
+        function calculatePotential(cargas, x_grid, y_grid) {
+            const rows = y_grid.length;
+            const cols = x_grid[0].length;
+            const V = Array(rows).fill(0).map(() => Array(cols).fill(0));
+            let vMin = Infinity;
+            let vMax = -Infinity;
+
+            for (const [q, pos] of cargas) {
+                if (q === 0) continue;
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                        const dx = x_grid[i][j] - pos[0];
+                        const dy = y_grid[i][j] - pos[1];
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        if (dist === 0) {
+                            // Singularidade na posição da carga
+                            V[i][j] = q > 0 ? Infinity : -Infinity;
+                        } else {
+                            V[i][j] += (k * q) / dist;
+                        }
+                    }
+                }
+            }
+            
+            // Encontra min/max ignorando infinitos
+            let vAbsMax = 0;
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    const val = V[i][j];
+                    if (isFinite(val)) {
+                        if (val < vMin) vMin = val;
+                        if (val > vMax) vMax = val;
+                        if (Math.abs(val) > vAbsMax) vAbsMax = Math.abs(val);
+                    }
+                }
+            }
+            
+            // Se vAbsMax for 0 (sem cargas), define um padrão para evitar divisão por zero
+            if (vAbsMax === 0) vAbsMax = 1;
+
+            return { potentialGrid: V, vMin, vMax, vAbsMax };
+        }
+
+        /**
+         * Calcula o campo elétrico vetorial (Ex, Ey) em uma grade de pontos.
+         * (Portado de 'calcular_campo_eletrico')
+         */
+        function calculateElectricField(cargas, x_grid, y_grid) {
+            const rows = y_grid.length;
+            const cols = x_grid[0].length;
+            const Ex = Array(rows).fill(0).map(() => Array(cols).fill(0));
+            const Ey = Array(rows).fill(0).map(() => Array(cols).fill(0));
+
+            for (const [q, pos] of cargas) {
+                if (q === 0) continue;
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                        const dx = x_grid[i][j] - pos[0];
+                        const dy = y_grid[i][j] - pos[1];
+                        const dist_sq = dx * dx + dy * dy;
+                        if (dist_sq === 0) continue; // Pula o cálculo na posição da carga
+
+                        const r = Math.sqrt(dist_sq);
+                        const magnitude = (k * q) / dist_sq;
+                        Ex[i][j] += magnitude * dx / r;
+                        Ey[i][j] += magnitude * dy / r;
+                    }
+                }
+            }
+            return [Ex, Ey];
+        }
+
+        // --- Lógica de Desenho no Canvas ---
+
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const canvasSize = canvas.width; // Assumindo canvas quadrado
+
+        // Limites do "mundo" da simulação (em metros)
+        const worldMin = -2.1;
+        const worldMax = 2.1;
+        const worldSize = worldMax - worldMin;
+
+        // --- Estado da Aplicação ---
+        let appState = {
+            cargas: [
+                // Os valores de 'q' e 'pos' serão preenchidos pelo 'updateStateFromForm'
+                { id: 1, valInput: 'q1_val', xInput: 'q1_x', yInput: 'q1_y', q: 0, pos: [0, 0], canvasRadius: 8 },
+                { id: 2, valInput: 'q2_val', xInput: 'q2_x', yInput: 'q2_y', q: 0, pos: [0, 0], canvasRadius: 8 }
+            ],
+            draggingCharge: null,
+            baseCharge: 1e-9, // Carga base para o raio
+            baseRadius: 8      // Raio base em pixels
+        };
+
+        // --- Estado do Avatar (Adicionado) ---
+        let isMuted = true;
+        const defaultAvatarMessage = `
+            <h3>Bem-vindo ao Simulador!</h3>
+            <p>Configure os valores, clique e arraste as cargas para ver o campo se ajustar!</p>
+        `;
+
+        // --- Funções de Mapeamento de Coordenadas ---
+
+        // Função para mapear coordenadas do mundo para coordenadas do canvas
+        function worldToCanvas(x, y) {
+            const scale = canvasSize / worldSize;
+            const canvasX = (x - worldMin) * scale;
+            // Inverte o eixo Y (canvas (0,0) é topo-esquerda, simulação (0,0) é centro)
+            const canvasY = canvasSize - (y - worldMin) * scale;
+            return [canvasX, canvasY];
+        }
+
+        // Função para mapear coordenadas do canvas para o mundo
+        function canvasToWorld(canvasX, canvasY) {
+            const scale = canvasSize / worldSize;
+            const worldX = (canvasX / scale) + worldMin;
+            // Inverte o eixo Y
+            const worldY = ((canvasSize - canvasY) / scale) + worldMin;
+            return [worldX, worldY];
+        }
+        
+        // --- Lógica do Avatar (Adicionada) ---
+        const avatarImg = document.getElementById('avatar-img');
+        function speak(text) {
+            if (isMuted || !('speechSynthesis' in window)) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            utterance.rate = 1.1;
+            utterance.onstart = () => avatarImg.classList.add('avatar-speaking');
+            utterance.onend = () => avatarImg.classList.remove('avatar-speaking');
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Listener para o movimento dos olhos (Adicionado)
+        document.addEventListener('mousemove', (e) => {
+            const pupils = document.querySelectorAll('.pupil');
+            pupils.forEach(pupil => {
+                const rect = pupil.parentElement.getBoundingClientRect();
+                const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                const rad = Math.atan2(e.pageY - y, e.pageX - x);
+                const rot = (rad * (180 / Math.PI) * -1) + 270;
+                pupil.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+            });
+        });
+        
+        function updateAvatar(message, shouldSpeak = false) {
+            document.getElementById('avatar-speech').innerHTML = message;
+            if (shouldSpeak) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = message;
+                speak(tempDiv.textContent || "");
+            }
+        }
+
+        // Função principal que redesenha toda a simulação
+        function drawSimulation() {
+            // 1. Limpa o canvas
+            ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+            // 2. Prepara os dados das cargas para cálculo
+            const cargasData = appState.cargas.map(c => [c.q, c.pos]);
+            
+            const hasCharges = cargasData.some(c => c[0] !== 0);
+            if (!hasCharges) {
+                ctx.fillStyle = "#f0f0f0"; // Cor de fundo do canvas
+                ctx.fillRect(0, 0, canvasSize, canvasSize);
+                return; // Nada para desenhar
+            }
+
+            // 3. Desenha os Vetores do Campo Elétrico (DESENHADO PRIMEIRO)
+            const fieldResolution = 25; // 25x25 grade
+            const vectorWorldLength = 0.15; // Comprimento do vetor em metros
+            const minDrawDist = 0.25; // Distância mínima da carga para desenhar
+
+            const x_range_field = linspace(worldMin, worldMax, fieldResolution);
+            const y_range_field = linspace(worldMin, worldMax, fieldResolution);
+            const [x_grid_field, y_grid_field] = meshgrid(x_range_field, y_range_field);
+
+            const [Ex, Ey] = calculateElectricField(cargasData, x_grid_field, y_grid_field);
+            
+            ctx.strokeStyle = '#000000'; // Cor preta para os vetores
+            ctx.lineWidth = 1;
+
+            for (let i = 0; i < fieldResolution; i++) {
+                for (let j = 0; j < fieldResolution; j++) {
+                    const x = x_grid_field[i][j];
+                    const y = y_grid_field[i][j];
+                    
+                    let isTooClose = false;
+                    for (const [q, pos] of cargasData) {
+                        if (q === 0) continue;
+                        const dist = Math.sqrt((x - pos[0])**2 + (y - pos[1])**2);
+                        if (dist < minDrawDist) {
+                            isTooClose = true;
+                            break;
+                        }
+                    }
+                    if (isTooClose) continue;
+
+                    const ex = Ex[i][j];
+                    const ey = Ey[i][j];
+                    const mag = Math.sqrt(ex * ex + ey * ey);
+                    if (mag === 0) continue;
+
+                    const dx = (ex / mag) * vectorWorldLength;
+                    const dy = (ey / mag) * vectorWorldLength;
+                    
+                    const [startX, startY] = worldToCanvas(x, y);
+                    const [endX, endY] = worldToCanvas(x + dx, y + dy);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                    
+                    const angle = Math.atan2(endY - startY, endX - startX);
+                    ctx.beginPath();
+                    ctx.moveTo(endX, endY);
+                    ctx.lineTo(endX - 6 * Math.cos(angle - Math.PI / 6), endY - 6 * Math.sin(angle - Math.PI / 6));
+                    ctx.lineTo(endX - 6 * Math.cos(angle + Math.PI / 6), endY - 6 * Math.sin(angle + Math.PI / 6));
+                    ctx.closePath();
+                    ctx.fillStyle = '#000000';
+                    ctx.fill();
+                }
+            }
+
+            // 4. Desenha as Linhas Equipotenciais (Contorno) (DESENHADO DEPOIS DOS VETORES)
+            const contourResolution = 100; // 100x100 grade
+            const x_range_pot = linspace(worldMin, worldMax, contourResolution);
+            const y_range_pot = linspace(worldMin, worldMax, contourResolution);
+            const [x_grid_pot, y_grid_pot] = meshgrid(x_range_pot, y_range_pot);
+
+            const { potentialGrid, vMin, vMax } = calculatePotential(cargasData, x_grid_pot, y_grid_pot);
+
+            const values1D = potentialGrid.flat();
+
+            let levels = [];
+            if (vMax > 1e-9) { 
+                const posStart = Math.log10(Math.max(vMax * 0.01, 1e-9));
+                const posEnd = Math.log10(vMax * 0.9);
+                if(posStart < posEnd) {
+                    const posLogs = d3.range(posStart, posEnd, 0.3); 
+                    levels = levels.concat(posLogs.map(l => Math.pow(10, l)));
+                }
+            }
+            if (vMin < -1e-9) { 
+                const negStart = Math.log10(Math.max(Math.abs(vMin * 0.01), 1e-9));
+                const negEnd = Math.log10(Math.abs(vMin * 0.9));
+                 if(negStart < negEnd) {
+                    const negLogs = d3.range(negStart, negEnd, 0.3);
+                    levels = levels.concat(negLogs.map(l => -Math.pow(10, l)));
+                }
+            }
+            levels.push(0.0); 
+            levels = levels.filter(l => isFinite(l)); 
+            levels.sort((a, b) => a - b); 
+
+            const contours = d3.contours()
+                .size([contourResolution, contourResolution]) 
+                .thresholds(levels) 
+                (values1D); 
+
+            // Linhas mais espessas e opacas para melhor visibilidade
+            ctx.strokeStyle = '#666'; // Cinza mais escuro e opaco
+            ctx.lineWidth = 1.2; // Mais espesso
+
+            const worldStep = worldSize / (contourResolution - 1);
+
+            for (const contour of contours) {
+                for (const ring of contour.coordinates) {
+                    ctx.beginPath();
+                    const [startJ, startI] = ring[0];
+                    const startWorldX = worldMin + startJ * worldStep;
+                    const startWorldY = worldMin + startI * worldStep;
+                    const [startX, startY] = worldToCanvas(startWorldX, startWorldY);
+                    ctx.moveTo(startX, startY);
+
+                    for (let k = 1; k < ring.length; k++) {
+                        const [j, i] = ring[k];
+                        const worldX = worldMin + j * worldStep;
+                        const worldY = worldMin + i * worldStep;
+                        const [canvasX, canvasY] = worldToCanvas(worldX, worldY);
+                        ctx.lineTo(canvasX, canvasY);
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            // 5. Desenha as Cargas (DESENHADO POR ÚLTIMO, POR CIMA DE TUDO)
+            const baseRadius = appState.baseRadius;
+            const baseCharge = appState.baseCharge;
+            
+            for (const charge of appState.cargas) {
+                const { q, pos } = charge;
+                if (q === 0) continue;
+                
+                const [cx, cy] = worldToCanvas(pos[0], pos[1]);
+                
+                // Lógica do Raio Dinâmico (Query 2)
+                const radius = baseRadius * Math.sqrt(Math.abs(q) / baseCharge);
+                const clampedRadius = Math.max(5, Math.min(25, radius)); // Limita o raio
+                charge.canvasRadius = clampedRadius; // Salva o raio em pixels para o hit-check
+                
+                ctx.beginPath();
+                ctx.arc(cx, cy, clampedRadius, 0, 2 * Math.PI);
+                
+                ctx.fillStyle = q > 0 ? '#ff0000' : '#0000ff'; // Vermelho para +, Azul para -
+                ctx.fill();
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        // --- Funções de Sincronização de Estado ---
+
+        // Atualiza o estado da aplicação a partir dos valores do formulário
+        function updateStateFromForm() {
+            for (const charge of appState.cargas) {
+                charge.q = parseFloat(document.getElementById(charge.valInput).value) || 0;
+                charge.pos[0] = parseFloat(document.getElementById(charge.xInput).value) || 0;
+                charge.pos[1] = parseFloat(document.getElementById(charge.yInput).value) || 0;
+            }
+        }
+
+        // Atualiza os inputs do formulário a partir do estado (usado ao arrastar)
+        function updateFormFromState(charge) {
+            // Formata para 2 casas decimais para não poluir o input
+            document.getElementById(charge.xInput).value = charge.pos[0].toFixed(2);
+            document.getElementById(charge.yInput).value = charge.pos[1].toFixed(2);
+        }
+
+        // --- Event Listeners ---
+
+        // Pega a posição do mouse relativa ao canvas
+        function getMousePos(event) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (event.clientX - rect.left) * scaleX,
+                y: (event.clientY - rect.top) * scaleY
+            };
+        }
+
+        // --- Listeners de Mouse para Arrastar (Query 3) ---
+
+        canvas.addEventListener('mousedown', (event) => {
+            const mousePos = getMousePos(event);
+
+            // Encontra a carga clicada (itera ao contrário para pegar a que está por cima)
+            let clickedCharge = null;
+            for (const charge of [...appState.cargas].reverse()) { 
+                if (charge.q === 0) continue;
+                
+                const [chargeCanvasX, chargeCanvasY] = worldToCanvas(charge.pos[0], charge.pos[1]);
+                const dist = Math.sqrt((mousePos.x - chargeCanvasX)**2 + (mousePos.y - chargeCanvasY)**2);
+
+                if (dist < charge.canvasRadius) { // Usa o raio em pixels salvo
+                    clickedCharge = charge;
+                    break;
+                }
+            }
+
+            if (clickedCharge) {
+                appState.draggingCharge = clickedCharge;
+                canvas.style.cursor = 'grabbing'; // Mãos fechada
+                updateAvatar("<h4>Ajustando posição...</h4><p>Solte o mouse para fixar a carga.</p>", true); // Avatar fala
+                event.preventDefault();
+            }
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (appState.draggingCharge) {
+                // Se está arrastando
+                const mousePos = getMousePos(event);
+                const [worldX, worldY] = canvasToWorld(mousePos.x, mousePos.y);
+                
+                appState.draggingCharge.pos[0] = worldX;
+                appState.draggingCharge.pos[1] = worldY;
+                
+                updateFormFromState(appState.draggingCharge);
+                drawSimulation();
+
+            } else {
+                // Se não está arrastando, apenas checa o hover
+                const mousePos = getMousePos(event);
+                let hovering = false;
+                for (const charge of appState.cargas) {
+                     if (charge.q === 0) continue;
+                     const [chargeCanvasX, chargeCanvasY] = worldToCanvas(charge.pos[0], charge.pos[1]);
+                     const dist = Math.sqrt((mousePos.x - chargeCanvasX)**2 + (mousePos.y - chargeCanvasY)**2);
+                     if (dist < charge.canvasRadius) {
+                        hovering = true;
+                        break;
+                     }
+                }
+                canvas.style.cursor = hovering ? 'grab' : 'default'; // Mão aberta
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (appState.draggingCharge) {
+                appState.draggingCharge = null;
+                updateAvatar("<h4>Posição atualizada!</h4><p>Recalculando o campo...</p>", true); // Avatar fala
+            }
+            canvas.style.cursor = 'default';
+        });
+
+        canvas.addEventListener('mouseout', () => {
+             if (appState.draggingCharge) {
+                 appState.draggingCharge = null; // Para de arrastar se sair do canvas
+                 updateAvatar("<h4>Posição atualizada!</h4><p>Recalculando o campo...</p>", true); // Avatar fala
+             }
+             canvas.style.cursor = 'default';
+        });
+
+        // --- Listeners de Inicialização e Formulário ---
+
+        // Desenha a simulação inicial quando a página carrega
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStateFromForm(); // Carrega os valores default do HTML no estado
+            drawSimulation();
+            
+            // Listeners do Avatar (Adicionados)
+            document.getElementById('sound-toggle').addEventListener('click', () => {
+                isMuted = !isMuted;
+                document.getElementById('sound-toggle').innerText = isMuted ? '🔇' : '🔊';
+                speak(isMuted ? "Áudio desativado." : "Áudio ativado.");
+            });
+            updateAvatar(defaultAvatarMessage, true);
+        });
+
+        // Redesenha a simulação sempre que qualquer valor no formulário mudar
+        document.getElementById('simForm').addEventListener('input', () => {
+            updateStateFromForm();
+            drawSimulation();
+            updateAvatar("<h4>Valores atualizados!</h4><p>Recalculando o campo...</p>"); // Avatar fala (sem som)
+        });
+
+    </script>
+</body>
+
+</html>
+
